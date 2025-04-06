@@ -264,10 +264,7 @@
     if (dropdownMenu.dataset[processedMark]) return; // Already processed
 
     try {
-      console.log("Eksi Engel: Processing dropdown menu:", dropdownMenu);
-      
-      // Log the current menu structure
-      console.log("Eksi Engel: Dropdown menu HTML before modification:", dropdownMenu.outerHTML);
+      console.debug("Eksi Engel: Processing dropdown menu");
       
       // Find the parent entry element
       const entryElement = dropdownMenu.closest('li[data-id]') ||
@@ -275,7 +272,9 @@
                           dropdownMenu.closest('[data-id]');
       
       if (!entryElement) {
-        console.error("Eksi Engel: Could not find parent entry element for dropdown menu.", dropdownMenu);
+        // Instead of error, just log at debug level and skip silently
+        console.debug("Eksi Engel: Skipping dropdown menu - no parent entry element found.");
+        dropdownMenu.dataset[processedMark] = "true"; // Mark as processed to avoid repeated attempts
         return; // Cannot find parent, skip
       }
 
@@ -286,15 +285,9 @@
       const eksiSozlukURL = window.location.origin;
       const entryUrl = `${eksiSozlukURL}/entry/${entryId}`;
 
-      console.log("Eksi Engel: Entry data extracted:", {
-        authorName,
-        authorId,
-        entryId,
-        entryUrl
-      });
-
       if (!authorName || !authorId || !entryId) {
-        console.error("Eksi Engel: Missing data attributes on entry element.", entryElement);
+        console.debug("Eksi Engel: Missing data attributes on entry element - skipping");
+        dropdownMenu.dataset[processedMark] = "true"; // Mark as processed to avoid repeated attempts
         return; // Missing data, skip
       }
 
@@ -317,13 +310,12 @@
       
       for (const item of menuItems) {
         const itemText = item.textContent.trim().toLowerCase();
-        console.log("Eksi Engel: Menu item text:", itemText);
         
         for (const targetText of targetButtonTexts) {
           if (itemText.includes(targetText)) {
             lastRelevantItem = item;
             isEntryMenu = true;
-            console.log("Eksi Engel: Found target button:", targetText);
+            console.debug("Eksi Engel: Found target button:", targetText);
             break;
           }
         }
@@ -331,7 +323,8 @@
       
       // Skip if this isn't the dropdown menu we're looking for
       if (!isEntryMenu) {
-        console.log("Eksi Engel: This doesn't appear to be an entry menu, skipping");
+        console.debug("Eksi Engel: This doesn't appear to be an entry menu, skipping");
+        dropdownMenu.dataset[processedMark] = "true"; // Mark as processed to avoid repeated attempts
         return;
       }
       
@@ -347,8 +340,6 @@
 
       // Insert buttons in the dropdown menu
       if (lastRelevantItem) {
-        console.log("Eksi Engel: Inserting buttons after last relevant item:", lastRelevantItem);
-        
         // Insert after the last relevant item
         if (lastRelevantItem.nextSibling) {
           dropdownMenu.insertBefore(newButtonBanUser, lastRelevantItem.nextSibling);
@@ -362,14 +353,10 @@
         }
       } else {
         // If no relevant item found, just append at the end
-        console.log("Eksi Engel: No relevant item found, appending at the end");
         dropdownMenu.appendChild(newButtonBanUser);
         dropdownMenu.appendChild(newButtonBanFav);
         dropdownMenu.appendChild(newButtonBanFollow);
       }
-      
-      // Log the modified menu structure
-      console.log("Eksi Engel: Dropdown menu after modification:", dropdownMenu.outerHTML);
 
       // Add event listeners
       newButtonBanUser.addEventListener("click", async function(e){
@@ -406,16 +393,11 @@
       });
 
       dropdownMenu.dataset[processedMark] = "true"; // Mark as processed
-      console.log("Eksi Engel: Successfully processed dropdown menu for entry ID:", entryId);
 
     } catch (error) {
-      console.error("Eksi Engel: Error processing dropdown menu:", error);
-      console.log("Eksi Engel: Dropdown menu that caused the error:", dropdownMenu);
-      
-      try {
-        console.log("Eksi Engel: Dropdown menu HTML:", dropdownMenu.outerHTML);
-      } catch (debugError) {
-        console.error("Eksi Engel: Error while trying to debug dropdown menu error:", debugError);
+      // Only log serious errors, not expected conditions
+      if (!(error instanceof TypeError) && !(error instanceof ReferenceError)) {
+        console.error("Eksi Engel: Unexpected error processing dropdown menu:", error);
       }
       
       dropdownMenu.dataset[processedMark] = "true"; // Mark as processed even on error
