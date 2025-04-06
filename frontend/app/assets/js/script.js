@@ -270,7 +270,11 @@
       entryMenu.appendChild(newButtonBanFollow);
 
       // Add listeners to appended buttons
-      newButtonBanUser.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, enums.TargetType.USER, clickSource) });
+      newButtonBanUser.addEventListener("click", async function(){
+        const config = await getConfig();
+        const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
+        EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, targetType, clickSource);
+      });
       newButtonBanFav.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FAV, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
       newButtonBanFollow.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FOLLOW, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
 
@@ -347,12 +351,16 @@
                       // remove big red button (dropdown menu is enough)
                       buttonRelation.remove();
                   } else {
-                      if (isBanned == "true") {
+                      if (isBanned == "true") { // Handle UNDOBAN case (always TargetType.USER for unblocking)
                           newButton.innerHTML = `<a><span><img src=${eksiEngelIconURL}> engellemeyi bırak</span></a>`;
                           newButton.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.UNDOBAN, null, authorName, authorId, enums.TargetType.USER, enums.ClickSource.PROFILE) });
-                      } else {
+                      } else { // Handle BAN case (check config for MUTE vs USER)
                           newButton.innerHTML = `<a><span><img src=${eksiEngelIconURL}> engelle</span></a>`;
-                          newButton.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, null, authorName, authorId, enums.TargetType.USER, enums.ClickSource.PROFILE) });
+                          newButton.addEventListener("click", async function(){
+                              const config = await getConfig();
+                              const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
+                              EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, null, authorName, authorId, targetType, enums.ClickSource.PROFILE);
+                          });
                       }
                       parentListItem.parentNode.append(newButton);
                   }

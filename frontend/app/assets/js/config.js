@@ -69,7 +69,7 @@ export async function handleConfig()
   if(c)
   {
     log.info("config", "Config restored from storage");
-    config = c;
+    Object.assign(config, c); // Update the properties of the existing exported object
   }
   else
   {
