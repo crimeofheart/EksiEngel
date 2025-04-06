@@ -202,62 +202,95 @@
     }
   }, 0);
 
-  setTimeout(async () => {
-    try {
-      // find source of the page to determine clickSource
-      let clickSource = enums.ClickSource.ENTRY;
-      // target url: https://website.com/sorunsal/example-title
-      let page = window.location.pathname.split('/')[1];
-      if(page == "sorunsal")
-        clickSource = enums.ClickSource.QUESTION;
-          
-      // select all dropdown menus for each entry in the page
-      let entryMenus = await waitForElm(".other.dropdown .dropdown-menu.right.toggles-menu", "entry menu");
-
-      // select all meta tags for each entry in the page
-      let entryMetas = await waitForElm("[data-author-id]", "meta in entry");
-
-      let eksiSozlukURL = window.location.origin;
-
-      for (let i = 0; i < entryMenus.length; i++)
-      {
-        let entryMenu = entryMenus[i];
-        let entryMeta = entryMetas[i];
-        
-        // extract some info from meta tag
-        let authorName = entryMeta.getAttribute("data-author");
-        let authorId = entryMeta.getAttribute("data-author-id");
-        let entryId = entryMeta.getAttribute("data-id");
-        let entryUrl = `${eksiSozlukURL}/entry/${entryId}`;
-        
-        // replace every whitespace with - (ekşi naming convention)
-        authorName = authorName.replace(/ /gi, "-");
-
-        // create new buttons ('a' tag is for css reasons)
-        let newButtonBanUser = document.createElement("li");
-        newButtonBanUser.innerHTML = `<a><img src=${eksiEngelIconURL}> yazarı engelle</a>`;
-        let newButtonBanFav = document.createElement("li");
-        newButtonBanFav.innerHTML = `<a><img src=${eksiEngelIconURL}> favlayanları engelle</a>`;
-        let newButtonBanFollow = document.createElement("li");
-        newButtonBanFollow.innerHTML = `<a><img src=${eksiEngelIconURL}> takipçilerini engelle</a>`;
-        
-        // append new buttons
-        entryMenu.style.minWidth = "max-content"; // allocate enough space for long texts
-        entryMenu.appendChild(newButtonBanUser);
-        entryMenu.appendChild(newButtonBanFav);
-        entryMenu.appendChild(newButtonBanFollow);
-        
-        // add listeners to appended buttons
-        newButtonBanUser.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, enums.TargetType.USER, clickSource) });
-        newButtonBanFav.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FAV, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
-        newButtonBanFollow.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FOLLOW, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
-      }
-
-      //console.log("Eksi Engel: handleEntryMenus: done");
-    } catch (error) {
-      console.error("Eksi Engel: Error in handleEntryMenus:", error);
+  // Function to add buttons to a single entry menu
+  const addButtonsToEntryMenu = (entryMenu) => {
+    // Check if already processed
+    if (entryMenu.dataset.eksiengelProcessed) {
+      return;
     }
-  }, 0);
+
+    // Find the corresponding entry meta data container (usually the parent entry element)
+    const entryElement = entryMenu.closest('li[data-id]'); // Adjust selector if needed
+    if (!entryElement) {
+      console.error("Eksi Engel: Could not find parent entry element for menu.", entryMenu);
+      return;
+    }
+
+    // Extract info from the entry element itself
+    const authorName = entryElement.getAttribute("data-author")?.replace(/ /gi, "-");
+    const authorId = entryElement.getAttribute("data-author-id");
+    const entryId = entryElement.getAttribute("data-id");
+    const eksiSozlukURL = window.location.origin;
+    const entryUrl = `${eksiSozlukURL}/entry/${entryId}`;
+
+    if (!authorName || !authorId || !entryId) {
+       console.error("Eksi Engel: Missing data attributes on entry element.", entryElement);
+       return;
+    }
+
+    // Determine click source
+    let clickSource = enums.ClickSource.ENTRY;
+    let page = window.location.pathname.split('/')[1];
+    if (page == "sorunsal") {
+      clickSource = enums.ClickSource.QUESTION;
+    }
+
+    // Create new buttons ('a' tag is for css reasons)
+    let newButtonBanUser = document.createElement("li");
+    newButtonBanUser.innerHTML = `<a><img src=${eksiEngelIconURL}> yazarı engelle</a>`;
+    let newButtonBanFav = document.createElement("li");
+    newButtonBanFav.innerHTML = `<a><img src=${eksiEngelIconURL}> favlayanları engelle</a>`;
+    let newButtonBanFollow = document.createElement("li");
+    newButtonBanFollow.innerHTML = `<a><img src=${eksiEngelIconURL}> takipçilerini engelle</a>`;
+
+    // Append new buttons
+    entryMenu.style.minWidth = "max-content"; // allocate enough space for long texts
+    entryMenu.appendChild(newButtonBanUser);
+    entryMenu.appendChild(newButtonBanFav);
+    entryMenu.appendChild(newButtonBanFollow);
+
+    // Add listeners to appended buttons
+    newButtonBanUser.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, enums.TargetType.USER, clickSource) });
+    newButtonBanFav.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FAV, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
+    newButtonBanFollow.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FOLLOW, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
+
+    // Mark as processed
+    entryMenu.dataset.eksiengelProcessed = "true";
+    //console.log("Eksi Engel: Processed entry menu for entry ID:", entryId);
+  };
+
+  // Function to initialize observation for entry menus
+  const observeEntryMenus = () => {
+    const entryListContainer = document.getElementById('entry-item-list') || document.body; // Target specific container or fallback to body
+    const menuSelector = ".other.dropdown .dropdown-menu.right.toggles-menu";
+
+    // Process menus already present on load
+    entryListContainer.querySelectorAll(menuSelector).forEach(addButtonsToEntryMenu);
+
+    // Observe for future additions
+    const observer = new MutationObserver((mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach(node => {
+            // Check if the added node itself is a menu or contains menus
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              if (node.matches(menuSelector)) {
+                addButtonsToEntryMenu(node);
+              } else {
+                node.querySelectorAll(menuSelector).forEach(addButtonsToEntryMenu);
+              }
+            }
+          });
+        }
+      }
+    });
+
+    observer.observe(entryListContainer, { childList: true, subtree: true });
+    //console.log("Eksi Engel: Observing for new entry menus in", entryListContainer);
+  };
+
+  // Initialize the observer for entry menus
+  observeEntryMenus();
 
   setTimeout(async () => {
     try {
