@@ -2,6 +2,7 @@
   let eksiEngelIconURL = chrome.runtime.getURL('assets/img/eksiengel16.png');
   const src = chrome.runtime.getURL("assets/js/enums.js");
   const enums = await import(src);
+  console.log("Eksi Engel: Enums loaded", enums);
 
   async function getConfig()
   {
@@ -171,15 +172,20 @@
 
   // --- Refactored Handlers with MutationObserver ---
 
-  const processedMark = 'eksiengel-processed'; // Attribute to mark processed elements
+  const processedMark = 'eksiengelProcessed'; // Attribute to mark processed elements (must be camelCase for dataset)
 
   // Function to process a single Title Menu (#in-topic-search-options)
   const processTitleMenu = (menuElement) => {
     if (menuElement.dataset[processedMark]) return; // Already processed
 
     try {
+      console.log("Eksi Engel: Processing title menu:", menuElement);
+      
       // Check if the necessary child elements exist before proceeding
-      if (menuElement.children.length === 0) return;
+      if (menuElement.children.length === 0) {
+        console.log("Eksi Engel: Title menu has no children, skipping");
+        return;
+      }
 
       // create new buttons
       let li1 = document.createElement("li");
@@ -187,9 +193,18 @@
       li1.innerHTML = `<a><img src=${eksiEngelIconURL}> başlıktakileri engelle (son 24 saatte)</a>`;
       li2.innerHTML = `<a><img src=${eksiEngelIconURL}> başlıktakileri engelle (tümü)</a>`;
 
-      // append the created buttons to before last element
-      menuElement.insertBefore(li1, menuElement.children[menuElement.childElementCount-1]);
-      menuElement.insertBefore(li2, menuElement.children[menuElement.childElementCount-1]);
+      // append the created buttons to before last element or at the end if not enough children
+      console.log("Eksi Engel: Title menu children count:", menuElement.childElementCount);
+      
+      if (menuElement.childElementCount > 1) {
+        // If there are at least 2 children, insert before the last one
+        menuElement.insertBefore(li1, menuElement.children[menuElement.childElementCount-1]);
+        menuElement.insertBefore(li2, menuElement.children[menuElement.childElementCount-1]);
+      } else {
+        // Otherwise just append to the end
+        menuElement.appendChild(li1);
+        menuElement.appendChild(li2);
+      }
 
       // get title name and id (assuming #title is available when the menu is)
       let titleElement = document.querySelector("#title");
@@ -217,34 +232,69 @@
       //console.log("Eksi Engel: Processed title menu.");
 
     } catch (error) {
-      console.error("Eksi Engel: Error processing title menu:", error, menuElement);
+      console.error("Eksi Engel: Error processing title menu:", error);
+      console.log("Eksi Engel: Menu element that caused the error:", menuElement);
+      
+      // Try to get more information about the error
+      try {
+        console.log("Eksi Engel: Menu element HTML:", menuElement.outerHTML);
+        console.log("Eksi Engel: Menu element children count:", menuElement.childElementCount);
+        
+        // Check if title element exists
+        const titleElement = document.querySelector("#title");
+        if (titleElement) {
+          console.log("Eksi Engel: Title element found:", titleElement.outerHTML);
+          console.log("Eksi Engel: Title data-slug:", titleElement.getAttribute("data-slug"));
+          console.log("Eksi Engel: Title data-id:", titleElement.getAttribute("data-id"));
+        } else {
+          console.log("Eksi Engel: Title element (#title) not found");
+        }
+      } catch (debugError) {
+        console.error("Eksi Engel: Error while trying to debug title menu error:", debugError);
+      }
+      
       // Mark as processed even if error occurs to prevent retrying on the same broken element
       menuElement.dataset[processedMark] = "true";
     }
   };
 
   // Function to add buttons to a single entry menu
-  // Function to process a single Entry Menu
-  const processEntryMenu = (entryMenu) => {
-    if (entryMenu.dataset[processedMark]) return; // Already processed
+  // Function to process a single Entry Menu (dropdown)
+  const processEntryMenu = (dropdownMenu) => {
+    if (dropdownMenu.dataset[processedMark]) return; // Already processed
 
     try {
-      // Find the corresponding entry meta data container (usually the parent entry element)
-      const entryElement = entryMenu.closest('li[data-id]'); // Adjust selector if needed
+      console.log("Eksi Engel: Processing dropdown menu:", dropdownMenu);
+      
+      // Log the current menu structure
+      console.log("Eksi Engel: Dropdown menu HTML before modification:", dropdownMenu.outerHTML);
+      
+      // Find the parent entry element
+      const entryElement = dropdownMenu.closest('li[data-id]') ||
+                          dropdownMenu.closest('article[data-id]') ||
+                          dropdownMenu.closest('[data-id]');
+      
       if (!entryElement) {
-        // console.error("Eksi Engel: Could not find parent entry element for menu.", entryMenu);
+        console.error("Eksi Engel: Could not find parent entry element for dropdown menu.", dropdownMenu);
         return; // Cannot find parent, skip
       }
 
-      // Extract info from the entry element itself
+      // Extract info from the entry element
       const authorName = entryElement.getAttribute("data-author")?.replace(/ /gi, "-");
       const authorId = entryElement.getAttribute("data-author-id");
       const entryId = entryElement.getAttribute("data-id");
       const eksiSozlukURL = window.location.origin;
       const entryUrl = `${eksiSozlukURL}/entry/${entryId}`;
 
+      console.log("Eksi Engel: Entry data extracted:", {
+        authorName,
+        authorId,
+        entryId,
+        entryUrl
+      });
+
       if (!authorName || !authorId || !entryId) {
-        // console.error("Eksi Engel: Missing data attributes on entry element.", entryElement);
+        console.error("Eksi Engel: Missing data attributes on entry element.", entryElement);
         return; // Missing data, skip
       }
 
@@ -255,35 +305,104 @@
         clickSource = enums.ClickSource.QUESTION;
       }
 
-      // Create new buttons ('a' tag is for css reasons)
+      // Find the last button in the dropdown menu to insert our buttons after it
+      const menuItems = dropdownMenu.querySelectorAll('li');
+      console.log("Eksi Engel: Found", menuItems.length, "menu items in dropdown");
+      
+      // Check if this is actually the dropdown menu we want
+      // Look for specific buttons that should be in the entry menu
+      let isEntryMenu = false;
+      let lastRelevantItem = null;
+      const targetButtonTexts = ['engelle', 'modlog', 'şikayet', 'mesaj'];
+      
+      for (const item of menuItems) {
+        const itemText = item.textContent.trim().toLowerCase();
+        console.log("Eksi Engel: Menu item text:", itemText);
+        
+        for (const targetText of targetButtonTexts) {
+          if (itemText.includes(targetText)) {
+            lastRelevantItem = item;
+            isEntryMenu = true;
+            console.log("Eksi Engel: Found target button:", targetText);
+            break;
+          }
+        }
+      }
+      
+      // Skip if this isn't the dropdown menu we're looking for
+      if (!isEntryMenu) {
+        console.log("Eksi Engel: This doesn't appear to be an entry menu, skipping");
+        return;
+      }
+      
+      // Create new buttons as list items
       let newButtonBanUser = document.createElement("li");
-      newButtonBanUser.innerHTML = `<a><img src=${eksiEngelIconURL}> yazarı engelle</a>`;
+      newButtonBanUser.innerHTML = `<a href="javascript:void(0);"><img src=${eksiEngelIconURL} style="width: 16px; height: 16px; vertical-align: middle; margin-right: 5px;"> yazarı engelle</a>`;
+      
       let newButtonBanFav = document.createElement("li");
-      newButtonBanFav.innerHTML = `<a><img src=${eksiEngelIconURL}> favlayanları engelle</a>`;
+      newButtonBanFav.innerHTML = `<a href="javascript:void(0);"><img src=${eksiEngelIconURL} style="width: 16px; height: 16px; vertical-align: middle; margin-right: 5px;"> favlayanları engelle</a>`;
+      
       let newButtonBanFollow = document.createElement("li");
-      newButtonBanFollow.innerHTML = `<a><img src=${eksiEngelIconURL}> takipçilerini engelle</a>`;
+      newButtonBanFollow.innerHTML = `<a href="javascript:void(0);"><img src=${eksiEngelIconURL} style="width: 16px; height: 16px; vertical-align: middle; margin-right: 5px;"> takipçilerini engelle</a>`;
 
-      // Append new buttons
-      entryMenu.style.minWidth = "max-content"; // allocate enough space for long texts
-      entryMenu.appendChild(newButtonBanUser);
-      entryMenu.appendChild(newButtonBanFav);
-      entryMenu.appendChild(newButtonBanFollow);
+      // Insert buttons in the dropdown menu
+      if (lastRelevantItem) {
+        console.log("Eksi Engel: Inserting buttons after last relevant item:", lastRelevantItem);
+        
+        // Insert after the last relevant item
+        if (lastRelevantItem.nextSibling) {
+          dropdownMenu.insertBefore(newButtonBanUser, lastRelevantItem.nextSibling);
+          dropdownMenu.insertBefore(newButtonBanFav, lastRelevantItem.nextSibling.nextSibling);
+          dropdownMenu.insertBefore(newButtonBanFollow, lastRelevantItem.nextSibling.nextSibling.nextSibling);
+        } else {
+          // If it's the last element, just append
+          dropdownMenu.appendChild(newButtonBanUser);
+          dropdownMenu.appendChild(newButtonBanFav);
+          dropdownMenu.appendChild(newButtonBanFollow);
+        }
+      } else {
+        // If no relevant item found, just append at the end
+        console.log("Eksi Engel: No relevant item found, appending at the end");
+        dropdownMenu.appendChild(newButtonBanUser);
+        dropdownMenu.appendChild(newButtonBanFav);
+        dropdownMenu.appendChild(newButtonBanFollow);
+      }
+      
+      // Log the modified menu structure
+      console.log("Eksi Engel: Dropdown menu after modification:", dropdownMenu.outerHTML);
 
-      // Add listeners to appended buttons
-      newButtonBanUser.addEventListener("click", async function(){
+      // Add event listeners
+      newButtonBanUser.addEventListener("click", async function(e){
+        e.preventDefault();
         const config = await getConfig();
         const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
         EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, targetType, clickSource);
       });
-      newButtonBanFav.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FAV, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
-      newButtonBanFollow.addEventListener("click", function(){ EksiEngel_sendMessage(enums.BanSource.FOLLOW, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource) });
+      
+      newButtonBanFav.addEventListener("click", function(e){
+        e.preventDefault();
+        EksiEngel_sendMessage(enums.BanSource.FAV, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource);
+      });
+      
+      newButtonBanFollow.addEventListener("click", function(e){
+        e.preventDefault();
+        EksiEngel_sendMessage(enums.BanSource.FOLLOW, enums.BanMode.BAN, entryUrl, authorName, authorId, null, clickSource);
+      });
 
-      entryMenu.dataset[processedMark] = "true"; // Mark as processed
-      //console.log("Eksi Engel: Processed entry menu for entry ID:", entryId);
+      dropdownMenu.dataset[processedMark] = "true"; // Mark as processed
+      console.log("Eksi Engel: Successfully processed dropdown menu for entry ID:", entryId);
 
     } catch (error) {
-      console.error("Eksi Engel: Error processing entry menu:", error, entryMenu);
-      entryMenu.dataset[processedMark] = "true"; // Mark as processed even on error
+      console.error("Eksi Engel: Error processing dropdown menu:", error);
+      console.log("Eksi Engel: Dropdown menu that caused the error:", dropdownMenu);
+      
+      try {
+        console.log("Eksi Engel: Dropdown menu HTML:", dropdownMenu.outerHTML);
+      } catch (debugError) {
+        console.error("Eksi Engel: Error while trying to debug dropdown menu error:", debugError);
+      }
+      
+      dropdownMenu.dataset[processedMark] = "true"; // Mark as processed even on error
     }
   };
 
@@ -401,7 +520,44 @@
           //console.log("Eksi Engel: Processed relation buttons.");
 
       } catch (error) {
-          console.error("Eksi Engel: Error processing relation buttons:", error, profileButtonsContainer);
+          console.error("Eksi Engel: Error processing relation buttons:", error);
+          console.log("Eksi Engel: Profile buttons container that caused the error:", profileButtonsContainer);
+          
+          // Try to get more information about the error
+          try {
+              console.log("Eksi Engel: Profile buttons container HTML:", profileButtonsContainer.outerHTML);
+              
+              // Check if author elements exist
+              const authorNameElement = document.querySelector("[data-nick]");
+              const authorIdElement = document.getElementById("who");
+              
+              if (authorNameElement) {
+                  console.log("Eksi Engel: Author name element found:", authorNameElement.outerHTML);
+                  console.log("Eksi Engel: Author data-nick:", authorNameElement.getAttribute("data-nick"));
+              } else {
+                  console.log("Eksi Engel: Author name element ([data-nick]) not found");
+              }
+              
+              if (authorIdElement) {
+                  console.log("Eksi Engel: Author ID element found:", authorIdElement.outerHTML);
+                  console.log("Eksi Engel: Author ID value:", authorIdElement.value);
+              } else {
+                  console.log("Eksi Engel: Author ID element (#who) not found");
+              }
+              
+              // Check relation links
+              const relationLinks = profileButtonsContainer.querySelectorAll(".relation-link");
+              console.log("Eksi Engel: Number of relation links found:", relationLinks.length);
+              relationLinks.forEach((link, index) => {
+                  console.log(`Eksi Engel: Relation link ${index}:`, link.outerHTML);
+                  console.log(`Eksi Engel: data-add-caption:`, link.getAttribute("data-add-caption"));
+                  console.log(`Eksi Engel: id:`, link.id);
+                  console.log(`Eksi Engel: data-added:`, link.getAttribute("data-added"));
+              });
+          } catch (debugError) {
+              console.error("Eksi Engel: Error while trying to debug relation buttons error:", debugError);
+          }
+          
           profileButtonsContainer.dataset[processedMark] = "true"; // Mark as processed even on error
       }
   };
@@ -409,10 +565,19 @@
   // --- Main Observer ---
 
   const observeDOMChanges = () => {
+    console.log("Eksi Engel: Setting up MutationObserver");
+    
+    if (!document.body) {
+      console.error("Eksi Engel: document.body not available yet, retrying in 100ms");
+      setTimeout(observeDOMChanges, 100);
+      return;
+    }
+    
     const observer = new MutationObserver((mutationsList) => {
       // Use requestAnimationFrame to batch processing and avoid layout thrashing
       window.requestAnimationFrame(() => {
         let processedSomething = false;
+        console.log("Eksi Engel: Processing", mutationsList.length, "mutations");
         for (const mutation of mutationsList) {
           if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
             mutation.addedNodes.forEach(node => {
@@ -422,18 +587,34 @@
                   processTitleMenu(node);
                   processedSomething = true;
                 } else {
-                  node.querySelectorAll('#in-topic-search-options:not([data-eksiengel-processed="true"])').forEach(processTitleMenu);
-                  if (node.querySelector('#in-topic-search-options:not([data-eksiengel-processed="true"])')) processedSomething = true;
+                  node.querySelectorAll('#in-topic-search-options:not([data-eksiengelProcessed="true"])').forEach(processTitleMenu);
+                  if (node.querySelector('#in-topic-search-options:not([data-eksiengelProcessed="true"])')) processedSomething = true;
                 }
 
-                // Check for Entry Menus
-                const entryMenuSelector = ".other.dropdown .dropdown-menu.right.toggles-menu";
+                // Check for Entry Menus - targeting the three-dot dropdown menu
+                // This is the menu that contains 'mesaj gönder', 'şikayet', 'modlog', and 'engelle' buttons
+                const entryMenuSelector = ".dropdown-menu, ul.toggles-menu, .other .dropdown-menu";
                 if (node.matches(entryMenuSelector)) {
+                  console.log("Eksi Engel: Direct match for entry menu found");
                   processEntryMenu(node);
-                   processedSomething = true;
+                  processedSomething = true;
                 } else {
-                  node.querySelectorAll(`${entryMenuSelector}:not([data-eksiengel-processed="true"])`).forEach(processEntryMenu);
-                   if (node.querySelector(`${entryMenuSelector}:not([data-eksiengel-processed="true"])`)) processedSomething = true;
+                  const foundMenus = node.querySelectorAll(`${entryMenuSelector}:not([data-eksiengelProcessed="true"])`);
+                  if (foundMenus.length > 0) {
+                    console.log("Eksi Engel: Found", foundMenus.length, "entry menus within added node");
+                    foundMenus.forEach(processEntryMenu);
+                    processedSomething = true;
+                  } else {
+                    // Try a fallback selector if the primary one doesn't find anything
+                    const fallbackSelector = ".dropdown-menu:has(li a[href*='mesaj'])";
+                    const fallbackMenus = node.querySelectorAll(`${fallbackSelector}:not([data-eksiengelProcessed="true"])`);
+                    
+                    if (fallbackMenus.length > 0) {
+                      console.log("Eksi Engel: Found", fallbackMenus.length, "menus with fallback selector in added node");
+                      fallbackMenus.forEach(processEntryMenu);
+                      processedSomething = true;
+                    }
+                  }
                 }
 
                 // Check for Relation Button Containers (adjust selector if needed)
@@ -443,7 +624,7 @@
                    processedSomething = true;
                 } else {
                   // Check if added node *contains* the container
-                  const container = node.querySelector(`${relationContainerSelector}:not([data-eksiengel-processed="true"])`);
+                  const container = node.querySelector(`${relationContainerSelector}:not([data-eksiengelProcessed="true"])`);
                   if(container) {
                       processRelationButtons(container);
                       processedSomething = true;
@@ -475,12 +656,17 @@
       });
     });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      // attributes: true, // Uncomment if observing attribute changes is necessary
-      // attributeFilter: ['data-added'] // Example: only observe changes to 'data-added'
-    });
+    try {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        // attributes: true, // Uncomment if observing attribute changes is necessary
+        // attributeFilter: ['data-added'] // Example: only observe changes to 'data-added'
+      });
+      console.log("Eksi Engel: MutationObserver successfully attached to document.body");
+    } catch (error) {
+      console.error("Eksi Engel: Error attaching MutationObserver:", error);
+    }
 
     //console.log("Eksi Engel: Main DOM observer started.");
   };
@@ -489,16 +675,55 @@
 
   // Perform an initial scan for elements present on load
   try {
-    document.querySelectorAll('#in-topic-search-options:not([data-eksiengel-processed="true"])').forEach(processTitleMenu);
-    document.querySelectorAll('.other.dropdown .dropdown-menu.right.toggles-menu:not([data-eksiengel-processed="true"])').forEach(processEntryMenu);
-    document.querySelectorAll('.profile-buttons:not([data-eksiengel-processed="true"])').forEach(processRelationButtons); // Adjust selector if needed
-    //console.log("Eksi Engel: Initial element scan complete.");
+    console.log("Eksi Engel: Starting initial scan for elements");
+    const titleMenus = document.querySelectorAll('#in-topic-search-options:not([data-eksiengelProcessed="true"])');
+    console.log("Eksi Engel: Found", titleMenus.length, "title menus");
+    titleMenus.forEach(processTitleMenu);
+    
+    // Updated selector to target the three-dot dropdown menu
+    const entryMenuSelector = ".dropdown-menu, ul.toggles-menu, .other .dropdown-menu";
+    const entryMenus = document.querySelectorAll(`${entryMenuSelector}:not([data-eksiengelProcessed="true"])`);
+    console.log("Eksi Engel: Found", entryMenus.length, "entry menus");
+    console.log("Eksi Engel: Entry menu selector used:", entryMenuSelector);
+    
+    // Log some sample menus if found
+    if (entryMenus.length > 0) {
+      console.log("Eksi Engel: Sample entry menu HTML:", entryMenus[0].outerHTML);
+    } else {
+      // Try a fallback selector if the primary one doesn't find anything
+      console.log("Eksi Engel: Primary selector found no menus, trying fallback selector");
+      const fallbackSelector = ".dropdown-menu:has(li a[href*='mesaj'])";
+      const fallbackMenus = document.querySelectorAll(`${fallbackSelector}:not([data-eksiengelProcessed="true"])`);
+      console.log("Eksi Engel: Found", fallbackMenus.length, "menus with fallback selector");
+      
+      if (fallbackMenus.length > 0) {
+        console.log("Eksi Engel: Sample fallback menu HTML:", fallbackMenus[0].outerHTML);
+        console.log("Eksi Engel: Processing menus found with fallback selector");
+        fallbackMenus.forEach(processEntryMenu);
+      } else {
+        // If still no menus found, try to find any dropdown menus for debugging
+        const anyDropdowns = document.querySelectorAll('.dropdown-menu');
+        console.log("Eksi Engel: Found", anyDropdowns.length, "general dropdown menus");
+        if (anyDropdowns.length > 0) {
+          console.log("Eksi Engel: Sample dropdown HTML:", anyDropdowns[0].outerHTML);
+        }
+      }
+    }
+    
+    entryMenus.forEach(processEntryMenu);
+    
+    const profileButtons = document.querySelectorAll('.profile-buttons:not([data-eksiengelProcessed="true"])');
+    console.log("Eksi Engel: Found", profileButtons.length, "profile button containers");
+    profileButtons.forEach(processRelationButtons);
+    
+    console.log("Eksi Engel: Initial element scan complete.");
   } catch(error) {
       console.error("Eksi Engel: Error during initial scan:", error);
   }
 
   // Start observing for dynamic changes
   observeDOMChanges();
+  console.log("Eksi Engel: MutationObserver initialized");
 
   // Note: The previous setTimeout wrappers are removed.
   // The initial scan and the main observer handle the execution now.
