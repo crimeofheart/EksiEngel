@@ -375,8 +375,24 @@
       newButtonBanUser.addEventListener("click", async function(e){
         e.preventDefault();
         const config = await getConfig();
-        const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
-        EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, targetType, clickSource);
+        
+        // Check if title ban is enabled in config
+        if (config?.enableTitleBan) {
+          console.log("Eksi Engel: Title ban is enabled, blocking both user and titles");
+          // First block the user
+          const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
+          EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, targetType, clickSource);
+          
+          // Then block their titles
+          setTimeout(() => {
+            EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, enums.TargetType.TITLE, clickSource);
+          }, 500); // Small delay to ensure both actions are processed
+        } else {
+          // Just block the user without titles
+          console.log("Eksi Engel: Title ban is disabled, only blocking user");
+          const targetType = config?.enableMute ? enums.TargetType.MUTE : enums.TargetType.USER;
+          EksiEngel_sendMessage(enums.BanSource.SINGLE, enums.BanMode.BAN, entryUrl, authorName, authorId, targetType, clickSource);
+        }
       });
       
       newButtonBanFav.addEventListener("click", function(e){
