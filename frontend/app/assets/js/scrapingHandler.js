@@ -344,6 +344,57 @@ class ScrapingHandler
     }
   }
   
+  // Simplified version that fetches a specific page of blocked titles
+  async scrapeBlockedTitlesFirstPage(pageNumber = 1) {
+    log.info("scraping", `Fetching page ${pageNumber} of blocked titles`);
+    let scrapedRelations = new Map();
+    
+    try {
+      // Fetch the specified page of blocked titles
+      const partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.TITLE, pageNumber);
+      const partialNameList = partialListObj.authorNameList;
+      const partialIdList = partialListObj.authorIdList;
+      
+      // Create relation objects for each blocked title
+      for (let index = 0; index < partialIdList.length; ++index) {
+        const id = partialIdList[index];
+        const name = partialNameList[index];
+        
+        // Skip entries with missing data
+        if (!id || !name) {
+          log.warn("scraping", `Skipping entry with missing data: id=${id}, name=${name}`);
+          continue;
+        }
+        
+        // In the case of title blocking, the title ID is the same as the author ID
+        // Create a relation object with both author and title information
+        const relation = new Relation(name, id, false, true, false);
+        relation.titleId = id;  // Use the author ID as the title ID
+        relation.titleName = name;
+        scrapedRelations.set(name, relation);
+      }
+      
+      log.info("scraping", `Found ${scrapedRelations.size} blocked titles on page ${pageNumber}`);
+      return scrapedRelations;
+    } catch(err) {
+      log.err("scraping", `scrapeBlockedTitlesFirstPage (page ${pageNumber}): ${err}`);
+      return scrapedRelations; // Return empty map on error
+    }
+  }
+  
+  // Helper method to get the title ID for an author
+  async scrapeTitleIdForAuthor(authorId) {
+    try {
+      // In the case of title blocking, the title ID is actually the same as the author ID
+      // This is because the API uses the author ID as the title ID for title blocking
+      log.info("scraping", `Using author ID ${authorId} as title ID`);
+      return authorId;
+    } catch (error) {
+      log.err("scraping", `Error in scrapeTitleIdForAuthor: ${error}`);
+      return null;
+    }
+  }
+  
   async scrapeAuthorNamesFromBannedAuthorPage()
   {
     // no args
@@ -716,6 +767,60 @@ class ScrapingHandler
     }
     
     return scrapedRelations;   
+  }
+  
+  // Scrape the relationship status of an author (muted, blocked, etc.)
+  async scrapeAuthorRelationship(authorId) {
+    try {
+      // First check if the author is in the muted list
+      const mutedUsers = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.MUTE, 1);
+      const mutedIds = mutedUsers.authorIdList;
+      
+      // Check if the author is in the blocked users list
+      const blockedUsers = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.USER, 1);
+      const blockedIds = blockedUsers.authorIdList;
+      
+      // Check if the author has blocked titles
+      const blockedTitles = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.TITLE, 1);
+      const blockedTitleIds = blockedTitles.authorIdList;
+      
+      // Create a relationship object
+      const isMuted = mutedIds.includes(authorId);
+      const isBlocked = blockedIds.includes(authorId);
+      const hasTitleBlocked = blockedTitleIds.includes(authorId);
+      
+      // Find the author name from the appropriate list
+      let authorName = "";
+      if (isMuted) {
+        const index = mutedIds.indexOf(authorId);
+        if (index !== -1) {
+          authorName = mutedUsers.authorNameList[index];
+        }
+      } else if (isBlocked) {
+        const index = blockedIds.indexOf(authorId);
+        if (index !== -1) {
+          authorName = blockedUsers.authorNameList[index];
+        }
+      } else if (hasTitleBlocked) {
+        const index = blockedTitleIds.indexOf(authorId);
+        if (index !== -1) {
+          authorName = blockedTitles.authorNameList[index];
+        }
+      }
+      
+      return new Relation(
+        authorName,
+        authorId,
+        isBlocked,    // isBannedUser
+        hasTitleBlocked, // isBannedTitle
+        isMuted,      // isBannedMute
+        false,        // doIFollow (not checked)
+        false         // doTheyFollowMe (not checked)
+      );
+    } catch (err) {
+      log.err("scraping", `scrapeAuthorRelationship: authorId: ${authorId}, err: ${err}`);
+      return null;
+    }
   }
 }
 

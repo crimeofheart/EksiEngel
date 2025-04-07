@@ -77,7 +77,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
       
       // Also update the main status text
       if (statusTextDiv) {
-        statusTextDiv.innerHTML = "Durum: Engellenen kullanıcılar sessize alınıyor...";
+        // Check if we're in title unblocking mode or user muting mode
+        const isTitleUnblocking = window.location.href.includes("startTitleMigration");
+        if (isTitleUnblocking) {
+          statusTextDiv.innerHTML = "Durum: Başlık engelleri kaldırılıyor...";
+        } else {
+          statusTextDiv.innerHTML = "Durum: Engellenen kullanıcılar sessize alınıyor...";
+        }
       }
     }
     
@@ -110,7 +116,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     // Also update the main status text
     const statusTextDiv = document.getElementById("statusText");
     if (statusTextDiv) {
-      statusTextDiv.innerHTML = "Durum: Sonraki grup işleniyor...";
+      // Check if we're in title unblocking mode or user muting mode
+      const isTitleUnblocking = window.location.href.includes("startTitleMigration");
+      if (isTitleUnblocking) {
+        statusTextDiv.innerHTML = "Durum: Sonraki başlık grubu işleniyor...";
+      } else {
+        statusTextDiv.innerHTML = "Durum: Sonraki grup işleniyor...";
+      }
     }
     
     if (migrationResultText) {
@@ -147,7 +159,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     // Also update the main status text
     const statusTextDiv = document.getElementById("statusText");
     if (statusTextDiv) {
-      statusTextDiv.innerHTML = "Durum: İşlem tamamlandı!";
+      // Check if we're in title unblocking mode or user muting mode
+      const isTitleUnblocking = window.location.href.includes("startTitleMigration");
+      if (isTitleUnblocking) {
+        statusTextDiv.innerHTML = "Durum: Başlık engelleri kaldırma işlemi tamamlandı!";
+      } else {
+        statusTextDiv.innerHTML = "Durum: İşlem tamamlandı!";
+      }
     }
     
     if (migrationResultText) {
@@ -185,7 +203,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     // Also update the main status text
     const statusTextDiv = document.getElementById("statusText");
     if (statusTextDiv) {
-      statusTextDiv.innerHTML = "Durum: İşlem kullanıcı tarafından durduruldu!";
+      // Check if we're in title unblocking mode or user muting mode
+      const isTitleUnblocking = window.location.href.includes("startTitleMigration");
+      if (isTitleUnblocking) {
+        statusTextDiv.innerHTML = "Durum: Başlık engelleri kaldırma işlemi kullanıcı tarafından durduruldu!";
+      } else {
+        statusTextDiv.innerHTML = "Durum: İşlem kullanıcı tarafından durduruldu!";
+      }
     }
     
     if (migrationResultText) {

@@ -17,9 +17,10 @@ let g_notificationTabId = 0;
 
 chrome.runtime.onMessage.addListener(async function messageListener_Popup(message, sender, sendResponse) {
   
-  // Handle migration request first
-  if (message && message.action === "startMigration") {
-    log.info("bg", "Received startMigration request from popup.");
+  // Handle migration requests first
+  if (message && (message.action === "startMigration" || message.action === "startTitleMigration")) {
+    const isTitleMigration = message.action === "startTitleMigration";
+    log.info("bg", `Received ${isTitleMigration ? "title " : ""}migration request from popup.`);
     
     // --- Ensure Notification Tab Exists (Standard Logic) ---
     try {
@@ -41,9 +42,11 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
              log.info("bg", `Found existing notification tab: ${g_notificationTabId}`);
          } else {
              // Create a new tab if none exists
-             const tab = await chrome.tabs.create({ active: false, url: chrome.runtime.getURL("assets/html/notification.html") });
+             const notificationUrl = chrome.runtime.getURL("assets/html/notification.html") +
+                                    (isTitleMigration ? "?action=startTitleMigration" : "?action=startMigration");
+             const tab = await chrome.tabs.create({ active: false, url: notificationUrl });
              g_notificationTabId = tab.id;
-             log.info("bg", `Created new notification tab: ${g_notificationTabId}`);
+             log.info("bg", `Created new notification tab: ${g_notificationTabId} for ${isTitleMigration ? "title migration" : "migration"}`);
          }
       }
       programController.tabId = g_notificationTabId; // Set the ID in programController
@@ -108,12 +111,24 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
     }
     // --- End Notification Tab Handling ---
 
-    // Call the migration function (it handles checks internally now)
-    programController.migrateBlockedToMuted();
+    // Call the appropriate migration function (they handle checks internally)
+    if (isTitleMigration) {
+      programController.migrateBlockedTitlesToUnblocked();
+    } else {
+      programController.migrateBlockedToMuted();
+    }
     
     // Send response immediately for this message type
-    sendResponse({status: 'ok', message: 'Migration initiated'});
+    sendResponse({status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated`});
     return; // Don't process further as a standard ban/unban
+  }
+
+  // Handle early stop message
+  if (message && message.earlyStop !== undefined) {
+    log.info("bg", "Received early stop message");
+    programController.earlyStop = true;
+    sendResponse({status: 'ok', message: 'Early stop received'});
+    return; // Don't process further
   }
 
   // Existing logic for standard ban/unban operations
@@ -121,7 +136,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
   sendResponse({status: 'ok'});
 
  const obj = utils.filterMessage(message, "banSource", "banMode");
-	if(obj.resultType === enums.ResultType.FAIL) {
+ if(obj.resultType === enums.ResultType.FAIL) {
     // If it's not a migration message and doesn't fit the banSource/banMode structure, ignore it.
     log.info("bg", "Received message doesn't match known action types.");
   return;
