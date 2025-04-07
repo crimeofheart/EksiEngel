@@ -29,11 +29,48 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     const migrationBar = document.getElementById("migrationBar");
     const migrationBarText = document.getElementById("migrationBarText");
     const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
     
     if (migrationBar && migrationBarText && migrationProgressText) {
       migrationBar.style.width = `${message.percentage}%`;
       migrationBarText.innerHTML = `%${message.percentage}`;
       migrationProgressText.innerHTML = `İşlenen: ${message.current} / ${message.total}`;
+      
+      // Update status text if available
+      if (migrationStatusText) {
+        migrationStatusText.innerHTML = "İşlem devam ediyor...";
+      }
+    }
+    
+    sendResponse({ status: "ok" });
+    return true;
+  }
+  
+  // Handle migration completion
+  if (message && message.action === "migrationComplete") {
+    console.log(`Migration complete: ${message.message}`);
+    
+    // Update the migration UI elements
+    const migrationBar = document.getElementById("migrationBar");
+    const migrationBarText = document.getElementById("migrationBarText");
+    const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
+    const migrationResultText = document.getElementById("migrationResultText");
+    
+    if (migrationBar && migrationBarText) {
+      // Set progress bar to 100%
+      migrationBar.style.width = "100%";
+      migrationBarText.innerHTML = "%100";
+    }
+    
+    if (migrationStatusText) {
+      // Update status text to completed
+      migrationStatusText.innerHTML = "İşlem tamamlandı!";
+    }
+    
+    if (migrationResultText) {
+      // Show detailed results
+      migrationResultText.innerHTML = `Sonuç: Başarılı: ${message.migrated}, Atlanan: ${message.skipped}, Başarısız: ${message.failed}, Toplam: ${message.total}`;
     }
     
     sendResponse({ status: "ok" });

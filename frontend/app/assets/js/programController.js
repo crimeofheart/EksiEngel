@@ -235,6 +235,21 @@ class ProgramController
       // Show final results
       const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}, Total: ${migratedCount + skippedCount + failedCount}`;
       log.info("progctrl", finalMessage);
+      
+      // Update the notification page with completion status
+      try {
+        chrome.tabs.sendMessage(this.tabId, {
+          action: "migrationComplete",
+          message: finalMessage,
+          migrated: migratedCount,
+          skipped: skippedCount,
+          failed: failedCount,
+          total: migratedCount + skippedCount + failedCount
+        });
+      } catch (e) {
+        log.warn("progctrl", `Error sending completion message: ${e}`);
+      }
+      
       // Can't use alert in background script
       chrome.notifications.create({
         type: 'basic',
