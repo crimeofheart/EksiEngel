@@ -22,7 +22,8 @@
   },
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "notifications"
   ],
 	"content_scripts": [
 	  {

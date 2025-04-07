@@ -82,3 +82,8 @@ export function filterMessage(message, ...keys)
 	message.resultType = enums.ResultType.SUCCESS;
 	return message;
 }
+
+// Simple sleep function
+export async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

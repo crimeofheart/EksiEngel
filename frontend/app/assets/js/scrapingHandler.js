@@ -318,6 +318,32 @@ class ScrapingHandler
     
   }
   
+  // Simplified version that only fetches the first page of blocked users
+  async scrapeBlockedUsersFirstPage() {
+    log.info("scraping", "Fetching first page of blocked users only");
+    let scrapedRelations = new Map();
+    
+    try {
+      // Only fetch the first page of blocked users
+      const partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.USER, 1);
+      const partialNameList = partialListObj.authorNameList;
+      const partialIdList = partialListObj.authorIdList;
+      
+      // Create relation objects for each blocked user
+      for (let index = 0; index < partialIdList.length; ++index) {
+        const id = partialIdList[index];
+        const name = partialNameList[index];
+        scrapedRelations.set(name, new Relation(name, id, true, false, false));
+      }
+      
+      log.info("scraping", `Found ${scrapedRelations.size} blocked users on first page`);
+      return scrapedRelations;
+    } catch(err) {
+      log.err("scraping", "scrapeBlockedUsersFirstPage: " + err);
+      return scrapedRelations; // Return empty map on error
+    }
+  }
+  
   async scrapeAuthorNamesFromBannedAuthorPage()
   {
     // no args
