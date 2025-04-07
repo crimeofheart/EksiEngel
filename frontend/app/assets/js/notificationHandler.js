@@ -140,8 +140,8 @@ class NotificationHandler
     this.#sendMessage(enums.NotificationType.UPDATE_PLANNED_PROCESSES, "", "", plannedProcessesList, null, 0, 0, 0, 0);
   }
   notifyCooldown = (remainingTimeInSec) => {
-    this.#sendMessage(enums.NotificationType.COOLDOWN, 
-      `İşlem devam ediyor. (dakikada 6 engel limiti bekleniyor) <a target='_blank' href='${config.EksiSozlukURL}/eksi-sozlukun-yazar-engellemeye-sinir-getirmesi--7547420' style='color:red;'>Bu ne demek?</a>`, 
+    this.#sendMessage(enums.NotificationType.COOLDOWN,
+      `COOLDOWN: API limiti aşıldı. (dakikada 6 engel limiti bekleniyor) <a target='_blank' href='${config.EksiSozlukURL}/eksi-sozlukun-yazar-engellemeye-sinir-getirmesi--7547420' style='color:red;'>Bu ne demek?</a>`,
       "", [], null, 0, 0, 0, remainingTimeInSec);
   }
   notifyOngoing = (successfulAction, performedAction, plannedAction) => {

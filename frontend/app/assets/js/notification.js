@@ -2,9 +2,42 @@ import * as enums from './enums.js';
 import * as utils from './utils.js';
 
 document.addEventListener('DOMContentLoaded', async function () {
-  document.getElementById("earlyStop").addEventListener("click", function(element) {
-    chrome.runtime.sendMessage(null, {"earlyStop":0});
-  });
+  // Make the early stop button more visible and add a confirmation
+  const earlyStopButton = document.getElementById("earlyStop");
+  if (earlyStopButton) {
+    // Add some styling to make it more visible
+    earlyStopButton.style.backgroundColor = "#ff4444";
+    earlyStopButton.style.color = "white";
+    earlyStopButton.style.fontWeight = "bold";
+    earlyStopButton.style.padding = "8px 16px";
+    
+    earlyStopButton.addEventListener("click", function(element) {
+      // Send the early stop message
+      chrome.runtime.sendMessage(null, {"earlyStop":0});
+      
+      // Provide feedback that the button was clicked
+      earlyStopButton.textContent = "DURDURULUYOR...";
+      earlyStopButton.disabled = true;
+      
+      // Update the migration status if we're in a migration
+      const migrationStatusDiv = document.getElementById("migrationStatusText");
+      if (migrationStatusDiv) {
+        migrationStatusDiv.innerHTML = "İşlem durduruluyor...";
+      }
+      
+      // Also update the cooldown timer if it's active
+      const remainingTimeDiv = document.getElementById("remainingTimeInSec");
+      if (remainingTimeDiv) {
+        remainingTimeDiv.innerHTML = "Durduruluyor...";
+      }
+      
+      // Update the status text
+      const statusTextDiv = document.getElementById("statusText");
+      if (statusTextDiv) {
+        statusTextDiv.innerHTML = "İşlem kullanıcı tarafından durduruldu.";
+      }
+    });
+  }
   
   // Send a message to the background script that the notification page is ready
   setTimeout(() => {
@@ -30,6 +63,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     const migrationBarText = document.getElementById("migrationBarText");
     const migrationProgressText = document.getElementById("migrationProgressText");
     const migrationStatusText = document.getElementById("migrationStatusText");
+    const statusTextDiv = document.getElementById("statusText");
     
     if (migrationBar && migrationBarText && migrationProgressText) {
       migrationBar.style.width = `${message.percentage}%`;
@@ -40,13 +74,55 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
       if (migrationStatusText) {
         migrationStatusText.innerHTML = "İşlem devam ediyor...";
       }
+      
+      // Also update the main status text
+      if (statusTextDiv) {
+        statusTextDiv.innerHTML = "Durum: Engellenen kullanıcılar sessize alınıyor...";
+      }
     }
     
     sendResponse({ status: "ok" });
     return true;
   }
   
-  // Handle migration completion
+  // Handle migration batch completion
+  if (message && message.action === "migrationBatchComplete") {
+    console.log(`Migration batch complete: ${message.message}`);
+    
+    // Update the migration UI elements
+    const migrationBar = document.getElementById("migrationBar");
+    const migrationBarText = document.getElementById("migrationBarText");
+    const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
+    const migrationResultText = document.getElementById("migrationResultText");
+    
+    if (migrationBar && migrationBarText) {
+      // Reset progress bar for next batch
+      migrationBar.style.width = "0%";
+      migrationBarText.innerHTML = "%0";
+    }
+    
+    if (migrationStatusText) {
+      // Update status text to show continuing
+      migrationStatusText.innerHTML = "Sonraki grup işleniyor...";
+    }
+    
+    // Also update the main status text
+    const statusTextDiv = document.getElementById("statusText");
+    if (statusTextDiv) {
+      statusTextDiv.innerHTML = "Durum: Sonraki grup işleniyor...";
+    }
+    
+    if (migrationResultText) {
+      // Show batch results
+      migrationResultText.innerHTML = `Grup tamamlandı: Başarılı: ${message.migrated}, Atlanan: ${message.skipped}, Başarısız: ${message.failed}, Toplam: ${message.total}`;
+    }
+    
+    sendResponse({ status: "ok" });
+    return true;
+  }
+  
+  // Handle migration final completion
   if (message && message.action === "migrationComplete") {
     console.log(`Migration complete: ${message.message}`);
     
@@ -68,9 +144,77 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
       migrationStatusText.innerHTML = "İşlem tamamlandı!";
     }
     
+    // Also update the main status text
+    const statusTextDiv = document.getElementById("statusText");
+    if (statusTextDiv) {
+      statusTextDiv.innerHTML = "Durum: İşlem tamamlandı!";
+    }
+    
     if (migrationResultText) {
       // Show detailed results
       migrationResultText.innerHTML = `Sonuç: Başarılı: ${message.migrated}, Atlanan: ${message.skipped}, Başarısız: ${message.failed}, Toplam: ${message.total}`;
+    }
+    
+    // Re-enable the early stop button
+    const earlyStopButton = document.getElementById("earlyStop");
+    if (earlyStopButton) {
+      earlyStopButton.textContent = "ERKEN DURDUR";
+      earlyStopButton.disabled = false;
+    }
+    
+    sendResponse({ status: "ok" });
+    return true;
+  }
+  
+  // Handle migration stopped by user
+  if (message && message.action === "migrationStopped") {
+    console.log(`Migration stopped: ${message.message}`);
+    
+    // Update the migration UI elements
+    const migrationBar = document.getElementById("migrationBar");
+    const migrationBarText = document.getElementById("migrationBarText");
+    const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
+    const migrationResultText = document.getElementById("migrationResultText");
+    
+    if (migrationStatusText) {
+      // Update status text to stopped
+      migrationStatusText.innerHTML = "İşlem kullanıcı tarafından durduruldu!";
+    }
+    
+    // Also update the main status text
+    const statusTextDiv = document.getElementById("statusText");
+    if (statusTextDiv) {
+      statusTextDiv.innerHTML = "Durum: İşlem kullanıcı tarafından durduruldu!";
+    }
+    
+    if (migrationResultText) {
+      if (message.cooldown) {
+        migrationResultText.innerHTML = "İşlem cooldown sırasında durduruldu.";
+      } else if (message.processed !== undefined) {
+        migrationResultText.innerHTML = `İşlem durduruldu. İşlenen: ${message.processed} / ${message.total}`;
+      } else {
+        migrationResultText.innerHTML = "İşlem durduruldu.";
+      }
+    }
+    
+    // Re-enable the early stop button
+    const earlyStopButton = document.getElementById("earlyStop");
+    if (earlyStopButton) {
+      earlyStopButton.textContent = "ERKEN DURDUR";
+      earlyStopButton.disabled = false;
+    }
+    
+    // Also update the cooldown text if it exists
+    const completionCooldownDiv = document.getElementById("remainingTimeInSec");
+    if (completionCooldownDiv) {
+      completionCooldownDiv.innerHTML = "Tamamlandı";
+    }
+    
+    // Also update the cooldown text if it exists
+    const stoppedCooldownDiv = document.getElementById("remainingTimeInSec");
+    if (stoppedCooldownDiv) {
+      stoppedCooldownDiv.innerHTML = "Durduruldu";
     }
     
     sendResponse({ status: "ok" });
@@ -147,8 +291,23 @@ chrome.runtime.onMessage.addListener(async function messageListener_Background(m
   }
   if(obj.notification.status === enums.NotificationType.COOLDOWN)
   {
+    // Make it clear this is a cooldown period
     document.getElementById("statusText").innerHTML = obj.notification.statusText;
     document.getElementById("remainingTimeInSec").innerHTML = obj.notification.remainingTimeInSec + " saniye";
+    
+    // Also update the migration status if we're in a migration
+    const migrationStatusDiv = document.getElementById("migrationStatusText");
+    if (migrationStatusDiv) {
+      // Check if we're in the process of stopping
+      const earlyStopButton = document.getElementById("earlyStop");
+      if (earlyStopButton && earlyStopButton.disabled) {
+        // We're in the process of stopping, don't change the message
+        // It should remain as "İşlem durduruluyor..."
+      } else {
+        // Normal cooldown, show the cooldown message
+        migrationStatusDiv.innerHTML = "COOLDOWN: API limiti aşıldı. Bekleniyor...";
+      }
+    }
     return;
   }
   if(obj.notification.status === enums.NotificationType.UPDATE_PLANNED_PROCESSES)

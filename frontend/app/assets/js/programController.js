@@ -41,7 +41,8 @@ class ProgramController
     
   set earlyStop(val)
   {
-    if(!processQueue.isRunning)
+    // Check if either the standard queue is running or our migration is in progress
+    if(!processQueue.isRunning && !this._migrationInProgress)
     {
       log.info("progctrl", "early stop received, yet program is not running, so it will be ignored.");
       return;
@@ -50,7 +51,11 @@ class ProgramController
     this._earlyStop = val;
     if(val)
     {
-      log.info("progctrl", "early stop received, number of waiting processes in the queue: " + processQueue.size);
+      if (this._migrationInProgress) {
+        log.info("progctrl", "early stop received during migration process.");
+      } else {
+        log.info("progctrl", "early stop received, number of waiting processes in the queue: " + processQueue.size);
+      }
     }
     else
     {
@@ -93,6 +98,18 @@ class ProgramController
 
         if(this.earlyStop) { // Re-check after loop in case it was triggered during the last second
              log.info("progctrl", "Migration stopped early during cooldown wait.");
+             
+             // Send a final status update to the notification page
+             try {
+               chrome.tabs.sendMessage(this.tabId, {
+                 action: "migrationStopped",
+                 message: "Migration stopped by user during cooldown.",
+                 cooldown: true
+               });
+             } catch (e) {
+               log.warn("progctrl", `Error sending stop message: ${e}`);
+             }
+             
              return { resultType: enums.ResultType.FAIL, earlyStop: true };
         }
         
@@ -177,6 +194,19 @@ class ProgramController
         // Check for early stop
         if (this.earlyStop) {
           log.info("progctrl", "Migration stopped early by user.");
+          
+          // Send a final status update to the notification page
+          try {
+            chrome.tabs.sendMessage(this.tabId, {
+              action: "migrationStopped",
+              message: "Migration stopped by user.",
+              processed: i,
+              total: blockedUsers.length
+            });
+          } catch (e) {
+            log.warn("progctrl", `Error sending stop message: ${e}`);
+          }
+          
           break;
         }
         
@@ -207,6 +237,12 @@ class ProgramController
         log.info("progctrl", `Unblocking user: ${user.authorName}`);
         const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, user.authorId, true, false, false);
         
+        // Check if early stop was triggered during the retry
+        if (unblockResult.earlyStop) {
+          log.info("progctrl", "Migration stopped early by user during unblock operation.");
+          break;
+        }
+        
         if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to unblock user: ${user.authorName}`);
           failedCount++;
@@ -220,6 +256,12 @@ class ProgramController
         log.info("progctrl", `Muting user: ${user.authorName}`);
         const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, user.authorId, false, false, true);
         
+        // Check if early stop was triggered during the retry
+        if (muteResult.earlyStop) {
+          log.info("progctrl", "Migration stopped early by user during mute operation.");
+          break;
+        }
+        
         if (muteResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to mute user: ${user.authorName}`);
           failedCount++;
@@ -232,11 +274,43 @@ class ProgramController
         await utils.sleep(500);
       }
       
-      // Show final results
-      const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}, Total: ${migratedCount + skippedCount + failedCount}`;
+      const totalProcessed = migratedCount + skippedCount + failedCount;
+      
+      // Check if we processed a full page (25 users) and should continue
+      if (totalProcessed === 25) {
+        // We likely have more users to process
+        log.info("progctrl", `Processed 25 users. There may be more users to process. Restarting migration...`);
+        
+        // Update the notification page with batch completion status
+        try {
+          chrome.tabs.sendMessage(this.tabId, {
+            action: "migrationBatchComplete",
+            message: `Batch completed. Processed 25 users. Continuing with next batch...`,
+            migrated: migratedCount,
+            skipped: skippedCount,
+            failed: failedCount,
+            total: totalProcessed
+          });
+        } catch (e) {
+          log.warn("progctrl", `Error sending batch completion message: ${e}`);
+        }
+        
+        // Wait a bit before starting the next batch
+        await utils.sleep(2000);
+        
+        // Reset counters but keep migration flag
+        this._migrationInProgress = false;
+        
+        // Restart the migration process
+        this.migrateBlockedToMuted();
+        return;
+      }
+      
+      // This is the final batch (less than 25 users or error occurred)
+      const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Skipped: ${skippedCount}, Failed: ${failedCount}, Total: ${totalProcessed}`;
       log.info("progctrl", finalMessage);
       
-      // Update the notification page with completion status
+      // Update the notification page with final completion status
       try {
         chrome.tabs.sendMessage(this.tabId, {
           action: "migrationComplete",
@@ -244,7 +318,7 @@ class ProgramController
           migrated: migratedCount,
           skipped: skippedCount,
           failed: failedCount,
-          total: migratedCount + skippedCount + failedCount
+          total: totalProcessed
         });
       } catch (e) {
         log.warn("progctrl", `Error sending completion message: ${e}`);
@@ -283,14 +357,17 @@ chrome.runtime.onMessage.addListener(async function messageListener_Notification
 	
 	const obj = utils.filterMessage(message, "earlyStop");
 	if(obj.resultType === enums.ResultType.FAIL)
-    return;
-  else if(!programController.isActive)
-  {
-    log.info("progctrl", "early stop received, yet program is not running, so it will be ignored.");
-    return;
-  }
+	   return;
+	 
+	 // Check if either the standard queue is running or our migration is in progress
+	 if(!programController.isActive && !programController._migrationInProgress)
+	 {
+	   log.info("progctrl", "early stop received, yet program is not running, so it will be ignored.");
+	   return;
+	 }
 		
-  programController.earlyStop = true;
+	 log.info("progctrl", "Early stop received and will be processed.");
+	 programController.earlyStop = true;
 });
 
 // this listener fired every time a tab is closed by the user
