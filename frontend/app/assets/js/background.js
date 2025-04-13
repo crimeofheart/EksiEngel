@@ -16,15 +16,135 @@ log.info("bg", "initialized");
 let g_notificationTabId = 0;
 
 chrome.runtime.onMessage.addListener(async function messageListener_Popup(message, sender, sendResponse) {
-  sendResponse({status: 'ok'}); // added to suppress 'message port closed before a response was received' error
+  
+  // Handle migration requests first
+  if (message && (message.action === "startMigration" || message.action === "startTitleMigration")) {
+    const isTitleMigration = message.action === "startTitleMigration";
+    log.info("bg", `Received ${isTitleMigration ? "title " : ""}migration request from popup.`);
+    
+    // --- Ensure Notification Tab Exists (Standard Logic) ---
+    try {
+      let tabExists = false;
+      if (g_notificationTabId) { // Check if we have a stored ID
+        try {
+          await chrome.tabs.get(g_notificationTabId);
+          tabExists = true; // Tab still exists
+        } catch (e) {
+          log.warn("bg", "Stored notification tab ID not found, creating new one.");
+          g_notificationTabId = 0; // Reset ID
+        }
+      }
+      if (!tabExists) {
+         // Check if any notification tab is already open (e.g., after browser restart)
+         const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL("assets/html/notification.html") });
+         if (tabs && tabs.length > 0) {
+             g_notificationTabId = tabs[0].id;
+             log.info("bg", `Found existing notification tab: ${g_notificationTabId}`);
+         } else {
+             // Create a new tab if none exists
+             const notificationUrl = chrome.runtime.getURL("assets/html/notification.html") +
+                                    (isTitleMigration ? "?action=startTitleMigration" : "?action=startMigration");
+             const tab = await chrome.tabs.create({ active: false, url: notificationUrl });
+             g_notificationTabId = tab.id;
+             log.info("bg", `Created new notification tab: ${g_notificationTabId} for ${isTitleMigration ? "title migration" : "migration"}`);
+         }
+      }
+      programController.tabId = g_notificationTabId; // Set the ID in programController
+      
+      // Wait for the notification page to be fully loaded before proceeding
+      log.info("bg", "Waiting for notification page to be ready...");
+      
+      // Create a promise that resolves when the notification page is ready
+      const waitForNotificationPage = new Promise((resolve, reject) => {
+        // Set a timeout to avoid waiting forever
+        const timeout = setTimeout(() => {
+          reject(new Error("Timeout waiting for notification page to load"));
+        }, 5000); // 5 second timeout
+        
+        // Listen for a ready message from the notification page
+        const messageListener = (message, sender) => {
+          if (sender.tab && sender.tab.id === g_notificationTabId &&
+              message && message.action === "notificationPageReady") {
+            clearTimeout(timeout);
+            chrome.runtime.onMessage.removeListener(messageListener);
+            resolve();
+          }
+        };
+        
+        chrome.runtime.onMessage.addListener(messageListener);
+        
+        // Also try to send a ping to see if the page is already loaded
+        try {
+          chrome.tabs.sendMessage(g_notificationTabId, { action: "ping" }, response => {
+            // Check for runtime.lastError to prevent uncaught errors in the console
+            if (chrome.runtime.lastError) {
+              // This is expected if the page isn't loaded yet, so just log it
+              log.info("bg", "Ping failed, waiting for ready message: " + chrome.runtime.lastError.message);
+              return;
+            }
+            
+            if (response && response.status === "ok") {
+              clearTimeout(timeout);
+              chrome.runtime.onMessage.removeListener(messageListener);
+              resolve();
+            }
+          });
+        } catch (e) {
+          // Ignore errors here, we'll wait for the ready message
+          log.warn("bg", `Error sending ping to notification tab: ${e}`);
+        }
+      });
+      
+      try {
+        await waitForNotificationPage;
+        log.info("bg", "Notification page is ready.");
+      } catch (e) {
+        log.warn("bg", `Timed out waiting for notification page: ${e}. Proceeding anyway.`);
+        // We'll proceed even if we time out, as the page might still load
+      }
+      
+    } catch (e) {
+      log.err("bg", `Error handling notification tab before migration: ${e}`);
+      // Decide how to handle this - maybe alert the user?
+      sendResponse({status: 'error', message: 'Could not open notification page.'});
+      return; // Abort if we can't ensure notification page exists
+    }
+    // --- End Notification Tab Handling ---
 
-	const obj = utils.filterMessage(message, "banSource", "banMode");
-	if(obj.resultType === enums.ResultType.FAIL)
-		return;
+    // Call the appropriate migration function (they handle checks internally)
+    if (isTitleMigration) {
+      programController.migrateBlockedTitlesToUnblocked();
+    } else {
+      programController.migrateBlockedToMuted();
+    }
+    
+    // Send response immediately for this message type
+    sendResponse({status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated`});
+    return; // Don't process further as a standard ban/unban
+  }
+
+  // Handle early stop message
+  if (message && message.earlyStop !== undefined) {
+    log.info("bg", "Received early stop message");
+    programController.earlyStop = true;
+    sendResponse({status: 'ok', message: 'Early stop received'});
+    return; // Don't process further
+  }
+
+  // Existing logic for standard ban/unban operations
+  // Ensure response is sent if it wasn't a migration message
+  sendResponse({status: 'ok'});
+
+ const obj = utils.filterMessage(message, "banSource", "banMode");
+ if(obj.resultType === enums.ResultType.FAIL) {
+    // If it's not a migration message and doesn't fit the banSource/banMode structure, ignore it.
+    log.info("bg", "Received message doesn't match known action types.");
+  return;
+  }
 	
   log.info("bg", "a new process added to the queue, banSource: " + obj.banSource + ", banMode: " + obj.banMode);
   let wrapperProcessHandler = processHandler.bind(null, obj.banSource, obj.banMode, obj.entryUrl, obj.authorName, obj.authorId, obj.targetType, obj.clickSource, obj.titleName, obj.titleId, obj.timeSpecifier);
-  wrapperProcessHandler.banSource = obj.banSource;
+  wrapperProcessHandler.banSource = obj.banSource; // Keep associating metadata for queue display if needed
   wrapperProcessHandler.banMode = obj.banMode;
   wrapperProcessHandler.creationDateInStr = new Date().getHours() + ":" + new Date().getMinutes(); 
   processQueue.enqueue(wrapperProcessHandler);

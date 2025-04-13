@@ -32,6 +32,20 @@
   
   <p id="barText">0%</p>
   
+  <!-- Migration Progress Section -->
+  <div id="migrationProgressSection" style="margin-top: 15px; border: 1px dashed #ccc; padding: 10px;">
+    <h4>Engellenenleri Sessize Alma Durumu:</h4>
+    <div class="bar-container">
+      <div id="migrationBar" class="bar green" style="height:18px;width:0%"></div>
+    </div>
+    <p id="migrationBarText" style="font-size: 0.9em;">0%</p>
+    <p id="migrationStatusText" style="font-weight: bold;">İşlem bekleniyor...</p>
+    <p id="migrationProgressText" style="font-size: 0.9em;"></p>
+    <p id="migrationResultText" style="font-size: 0.9em;"></p>
+  </div>
+  <!-- End Migration Progress Section -->
+
+
   <div class="grid-container">
     <div class="grid-item">Durum:</div>            <div class="grid-item"><a id="statusText">İşlem başlayacak.</a></div>
     <div class="grid-item">Cooldown:</div>       <div class="grid-item"><a id="remainingTimeInSec">?</a></div>

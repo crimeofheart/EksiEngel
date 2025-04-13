@@ -22,13 +22,15 @@
   },
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "notifications"
   ],
 	"content_scripts": [
-   {
-     "matches": ["*://*/*"],
-     "js": ["assets/js/script.js"]
-   }
+	  {
+	    "matches": ["*://*/*"],
+	    "js": ["assets/js/script.js"],
+	    "type": "module"
+	  }
 	],
   "background": {
     "service_worker": "assets/js/background.js",

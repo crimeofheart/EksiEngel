@@ -46,8 +46,10 @@ export const ClickType = {
   FAQ_LINK_ENTRY_LIMIT: "FAQ_LINK_ENTRY_LIMIT",               /* user has pressed the link about entry limit in faq.html */
   WELCOME_LINK_ENTRY_LIMIT: "WELCOME_LINK_ENTRY_LIMIT",       /* user has pressed the link about entry limit in welcome.html */
   INSTALL_OR_UPDATE: "INSTALL_OR_UPDATE",                     /* user has installed or updated the extension */
-  WELCOME_PAGE: "WELCOME_PAGE"                                /* user has seen the welcome.html  */
-};         
+  WELCOME_PAGE: "WELCOME_PAGE",                               /* user has seen the welcome.html  */
+  EXTENSION_MENU_MIGRATE: "EXTENSION_MENU_MIGRATE",           /* user has pressed migrate button in extension menu */
+  EXTENSION_MENU_MIGRATE_TITLES: "EXTENSION_MENU_MIGRATE_TITLES", /* user has pressed migrate titles button in extension menu */
+};
 
 export const NotificationType = {
   UPDATE_PLANNED_PROCESSES: "UPDATE_PLANNED_PROCESSES",
@@ -55,6 +57,7 @@ export const NotificationType = {
   COOLDOWN:                 "COOLDOWN",
   FINISH:                   "FINISH",
   NOTIFY:                   "NOTIFY",
+  MIGRATION_UPDATE:         "MIGRATION_UPDATE",
 };
 
 export const TimeSpecifier = {

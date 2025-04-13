@@ -14,4 +14,16 @@
 **/__pycache__
 
 # test folder (no need for now)
-/test
+/test.clinerules-default
+.roo/system-prompt-architect
+.roo/system-prompt-ask
+.roo/system-prompt-code
+.roo/system-prompt-debug
+.roo/system-prompt-test
+.roomodes
+memory-bank/activeContext.md
+memory-bank/decisionLog.md
+memory-bank/productContext.md
+memory-bank/progress.md
+memory-bank/systemPatterns.md
+.clinerules-default
