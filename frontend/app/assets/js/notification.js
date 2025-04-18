@@ -53,6 +53,69 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     sendResponse({ status: "ok" });
     return true; // Keep the message channel open for the async response
   }
+
+  // Handle updateMutedListProgress messages
+  if (message && message.action === "updateMutedListProgress") {
+    console.log(`Updating muted list progress: Page ${message.currentPage}, Total ${message.currentCount}`);
+
+    // Update the UI elements
+    const migrationBar = document.getElementById("migrationBar");
+    const migrationBarText = document.getElementById("migrationBarText");
+    const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
+
+    if (migrationBar && migrationBarText && migrationProgressText) {
+      // Calculate percentage (assuming we don't know the total pages)
+      // This is a rough estimate, as the number of users per page can vary
+      const percentage = message.currentPage * 5; // Assuming ~20 users per page, so 100/20 = 5
+      migrationBar.style.width = `${percentage}%`;
+      migrationBarText.innerHTML = `%${percentage}`;
+      migrationProgressText.innerHTML = `Sayfa: ${message.currentPage}, Toplam: ${message.currentCount}`;
+
+      // Update status text if available
+      if (migrationStatusText) {
+        migrationStatusText.innerHTML = "Sessize alınan kullanıcılar alınıyor...";
+      }
+    }
+
+    sendResponse({ status: "ok" });
+    return true;
+  }
+
+  // Handle mutedListRefreshComplete messages
+  if (message && message.action === "mutedListRefreshComplete") {
+    console.log(`Muted list refresh complete: Success=${message.success}, Count=${message.count}, Error=${message.error}`);
+
+    // Update the UI elements
+    const migrationBar = document.getElementById("migrationBar");
+    const migrationBarText = document.getElementById("migrationBarText");
+    const migrationProgressText = document.getElementById("migrationProgressText");
+    const migrationStatusText = document.getElementById("migrationStatusText");
+    const migrationResultText = document.getElementById("migrationResultText");
+
+    if (migrationBar && migrationBarText) {
+      // Set progress bar to 100% or 0% depending on success
+      migrationBar.style.width = message.success ? "100%" : "0%";
+      migrationBarText.innerHTML = message.success ? "%100" : "%0";
+    }
+
+    if (migrationStatusText) {
+      // Update status text based on success
+      migrationStatusText.innerHTML = message.success ? "İşlem tamamlandı!" : "İşlem başarısız!";
+    }
+
+    if (migrationProgressText) {
+      migrationProgressText.innerHTML = message.success ? `Toplam: ${message.count}` : "";
+    }
+
+    if (migrationResultText) {
+      // Show result or error message
+      migrationResultText.innerHTML = message.success ? `Başarıyla alındı: ${message.count}` : `Hata: ${message.error || "Bilinmeyen hata"}`;
+    }
+
+    sendResponse({ status: "ok" });
+    return true;
+  }
   
   // Handle migration progress updates
   if (message && message.action === "updateMigrationProgress") {
@@ -286,128 +349,3 @@ function updatePlannedProcessesTable(plannedProcesses)
     cell3.innerHTML = plannedProcesses[i].banMode;
   }
 }
-
-// listen background script
-chrome.runtime.onMessage.addListener(async function messageListener_Background(message, sender, sendResponse) {
-  sendResponse({status: 'ok'}); // added to suppress 'message port closed before a response was received' error
-
-	const obj = utils.filterMessage(message, "notification");
-	if(obj.resultType === "FAIL")
-		return;
-  
-  console.log("incoming message: " + obj.notification.status);
-
-  if(obj.notification.status === enums.NotificationType.FINISH)
-  {
-    document.getElementById("statusText").innerHTML = obj.notification.statusText;
-    insertCompletedProcessesTable(obj.notification.completedProcess.banSource,
-                                  obj.notification.completedProcess.banMode,
-                                  obj.notification.successfulAction,
-                                  obj.notification.performedAction,
-                                  obj.notification.plannedAction,
-                                  obj.notification.errorText);
-    return;
-  }
-  if(obj.notification.status === enums.NotificationType.NOTIFY)
-  {
-    document.getElementById("statusText").innerHTML = obj.notification.statusText;
-    return;
-  }
-  if(obj.notification.status === enums.NotificationType.COOLDOWN)
-  {
-    // Make it clear this is a cooldown period
-    document.getElementById("statusText").innerHTML = obj.notification.statusText;
-    document.getElementById("remainingTimeInSec").innerHTML = obj.notification.remainingTimeInSec + " saniye";
-    
-    // Also update the migration status if we're in a migration
-    const migrationStatusDiv = document.getElementById("migrationStatusText");
-    if (migrationStatusDiv) {
-      // Check if we're in the process of stopping
-      const earlyStopButton = document.getElementById("earlyStop");
-      if (earlyStopButton && earlyStopButton.disabled) {
-        // We're in the process of stopping, don't change the message
-        // It should remain as "İşlem durduruluyor..."
-      } else {
-        // Normal cooldown, show the cooldown message
-        migrationStatusDiv.innerHTML = "COOLDOWN: API limiti aşıldı. Bekleniyor...";
-      }
-    }
-    return;
-  }
-  if(obj.notification.status === enums.NotificationType.UPDATE_PLANNED_PROCESSES)
-  {
-    updatePlannedProcessesTable(obj.notification.plannedProcesses);
-    return;
-  }
-  if(obj.notification.status === enums.NotificationType.ONGOING)
-  {
-    document.getElementById("statusText").innerHTML = obj.notification.statusText;
-  
-    // update values
-    document.getElementById("successfulAction").innerHTML = obj.notification.successfulAction;
-    document.getElementById("performedAction").innerHTML = obj.notification.performedAction;
-    document.getElementById("plannedAction").innerHTML = obj.notification.plannedAction;
-    
-    // update bar
-    let bar = document.getElementById("bar");   
-    let barText = document.getElementById("barText");  
-    let percentage = (100 * obj.notification.performedAction) / obj.notification.plannedAction;
-    if(obj.notification.plannedAction == 0 || obj.notification.plannedAction == "0")
-      percentage = 0;
-    percentage = parseInt(percentage);
-    barText.innerHTML = '%' + percentage;
-    bar.style.width = percentage + '%'; 
-    return;
-  }
-
-  if(obj.notification.status === enums.NotificationType.MIGRATION_UPDATE)
-  {
-    // Handle migration-specific updates
-    const migrationStatusDiv = document.getElementById("migrationStatusText");
-    const migrationProgressDiv = document.getElementById("migrationProgressText");
-    const migrationResultDiv = document.getElementById("migrationResultText");
-    const migrationBar = document.getElementById("migrationBar");
-    const migrationBarText = document.getElementById("migrationBarText");
-
-    if (!migrationStatusDiv || !migrationProgressDiv || !migrationResultDiv || !migrationBar || !migrationBarText) {
-        console.error("Notification page migration elements not found!");
-        return;
-    }
-
-    // Always update the main status text
-    migrationStatusDiv.innerHTML = obj.notification.statusText || "";
-    migrationProgressDiv.innerHTML = ""; // Clear progress text by default
-    migrationResultDiv.innerHTML = ""; // Clear result text by default
-    migrationBar.style.width = '0%'; // Reset bar
-    migrationBarText.innerHTML = '';
-
-    if (obj.notification.migrationStatus === 'progress') {
-        if (obj.notification.performedAction !== null && obj.notification.plannedAction !== null && obj.notification.plannedAction > 0) {
-            const current = obj.notification.performedAction;
-            const total = obj.notification.plannedAction;
-            const percentage = parseInt((100 * current) / total);
-            migrationProgressDiv.innerHTML = `İşlenen: ${current} / ${total}`;
-            migrationBar.style.width = percentage + '%';
-            migrationBarText.innerHTML = '%' + percentage;
-        } else {
-             // If only status text is provided, keep bar at 0 or previous state?
-             // For now, reset bar if counts are null
-             migrationBar.style.width = '0%';
-             migrationBarText.innerHTML = '';
-        }
-    } else if (obj.notification.migrationStatus === 'finished') {
-        migrationResultDiv.innerHTML = `Sonuç: Başarılı: ${obj.notification.successfulAction}, Atlanan: ${obj.notification.skippedCount}, Başarısız: ${obj.notification.failedCount}`;
-        migrationBar.style.width = '100%'; // Show completed bar
-        migrationBarText.innerHTML = '%100';
-    } else if (obj.notification.migrationStatus === 'error') {
-        migrationResultDiv.innerHTML = `Hata: ${obj.notification.errorText || 'Bilinmeyen hata'}`;
-        migrationBar.style.width = '0%'; // Reset bar on error
-        migrationBarText.innerHTML = 'Hata';
-    } else if (obj.notification.migrationStatus === 'started') {
-        // Initial state, bar at 0
-        migrationBar.style.width = '0%';
-        migrationBarText.innerHTML = '%0';
-    }
-    return;
-  }
-});

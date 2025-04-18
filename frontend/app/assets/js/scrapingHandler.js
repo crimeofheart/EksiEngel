@@ -2,6 +2,8 @@ import {log} from './log.js';
 import * as enums from './enums.js';
 import {JSDOM} from './jsdom.js';
 import {config} from './config.js';
+import * as utils from './utils.js';
+
 
 function Relation(authorName, authorId, isBannedUser, isBannedTitle, isBannedMute, doIFollow, doTheyFollowMe) {
   this.authorId = authorId;               // this author's id
@@ -508,6 +510,99 @@ class ScrapingHandler
       return scrapedRelations;
     }
   }
+
+  /**
+   * Scrapes all pages of muted users from Ekşi Sözlük.
+   * Handles pagination and polite delays, reporting progress via callback.
+   * @param {function({currentPage: number, currentCount: number}): void} [progressCallback] - Optional callback for progress updates.
+   * @returns {Promise<{success: boolean, count?: number, usernames?: string[], error?: string}>}
+   */
+  async scrapeAllMutedUsers(progressCallback) {
+    log.info("scraping", "Starting to scrape all muted users...");
+    let allMutedUsernames = [];
+    let totalCount = 0;
+    let index = 0;
+    let isLast = false;
+    const politeDelayMs = 500; // Delay between page requests in milliseconds
+    const maxRetries = 3; // Max retries for errors (excluding 429)
+    const retryDelayMs = 1000; // Delay before retrying a failed page fetch
+    const rateLimitDelayMs = 65000; // Delay after hitting a 429 error (65 seconds)
+
+    try {
+      while (!isLast) {
+        index++;
+        let attempt = 0;
+        let success = false;
+
+        while (attempt < maxRetries && !success) {
+          attempt++;
+          log.info("scraping", `Fetching muted users page ${index}, attempt ${attempt}...`);
+
+          try {
+            // Note: #scrapeAuthorNamesFromBannedAuthorPagePartially needs modification
+            // to throw or return specific error on 429 for proper handling here.
+            // Assuming for now it might throw or return an empty/error state.
+            const partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.MUTE, index);
+
+            // Basic check if the response structure is as expected
+            if (partialListObj && typeof partialListObj.isLast === 'boolean' && Array.isArray(partialListObj.authorNameList)) {
+              if (partialListObj.authorNameList.length > 0) {
+                allMutedUsernames.push(...partialListObj.authorNameList);
+                // Assuming IDs and Names length match, count based on names found
+                totalCount += partialListObj.authorNameList.length;
+                log.info("scraping", `Found ${partialListObj.authorNameList.length} users on page ${index}. Total: ${totalCount}`);
+              } else {
+                log.info("scraping", `Found 0 users on page ${index}.`);
+              }
+              isLast = partialListObj.isLast;
+              success = true; // Mark as successful fetch for this page
+
+              // Report progress if callback is provided
+              if (progressCallback && typeof progressCallback === 'function') {
+                try {
+                  progressCallback({ currentPage: index, currentCount: totalCount });
+                } catch (cbError) {
+                  log.err("scraping", `Progress callback error: ${cbError}`);
+                }
+              }
+
+            } else {
+              // Handle potential error case where partial function returns unexpected result
+              log.warn("scraping", `Unexpected result fetching page ${index}, attempt ${attempt}.`);
+              // Don't throw immediately, allow retry
+            }
+          } catch (err) {
+            // Check if it's a rate limit error (requires modification in partial func or checking response status if possible)
+            // Example pseudo-code: if (err.status === 429) { ... }
+            log.warn("scraping", `Error fetching page ${index}, attempt ${attempt}: ${err.message || err}`);
+            // If it was the last attempt, rethrow to exit the main loop
+            if (attempt >= maxRetries) {
+                 throw new Error(`Failed to fetch page ${index} after ${maxRetries} attempts.`);
+            }
+            // Wait before retrying
+            await utils.sleep(retryDelayMs);
+          }
+        } // End retry loop
+
+        if (!success) {
+            // If all retries failed for a page
+            throw new Error(`Failed to fetch page ${index} definitively.`);
+        }
+
+        if (!isLast) {
+          await utils.sleep(politeDelayMs); // Wait before fetching the next page
+        }
+      } // End page loop
+
+      log.info("scraping", `Successfully scraped all muted users. Total count: ${totalCount}`);
+      return { success: true, count: totalCount, usernames: allMutedUsernames };
+
+    } catch (err) {
+      log.err("scraping", `Error scraping all muted users: ${err.message || err}`);
+      return { success: false, error: err.message || 'Unknown error during scraping' };
+    }
+  }
+
 
   #scrapeFollowerPartially = async (scrapedRelations, authorName, index) =>
   {

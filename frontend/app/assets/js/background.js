@@ -11,17 +11,19 @@ import {processQueue} from './queue.js';
 import {programController} from './programController.js';
 import {handleEksiSozlukURL} from './urlHandler.js';
 import { notificationHandler } from './notificationHandler.js';
+import { storageHandler } from './storageHandler.js';
+
 
 log.info("bg", "initialized");
 let g_notificationTabId = 0;
 
 chrome.runtime.onMessage.addListener(async function messageListener_Popup(message, sender, sendResponse) {
-  
-  // Handle migration requests first
-  if (message && (message.action === "startMigration" || message.action === "startTitleMigration")) {
-    const isTitleMigration = message.action === "startTitleMigration";
-    log.info("bg", `Received ${isTitleMigration ? "title " : ""}migration request from popup.`);
-    
+  log.info("bg", "Received message:", message);
+
+  // --- Handle refreshMutedList action ---
+  if (message && message.action === "refreshMutedList") {
+    log.info("bg", "Received refreshMutedList request from popup.");
+
     // --- Ensure Notification Tab Exists (Standard Logic) ---
     try {
       let tabExists = false;
@@ -42,25 +44,24 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
              log.info("bg", `Found existing notification tab: ${g_notificationTabId}`);
          } else {
              // Create a new tab if none exists
-             const notificationUrl = chrome.runtime.getURL("assets/html/notification.html") +
-                                    (isTitleMigration ? "?action=startTitleMigration" : "?action=startMigration");
+             const notificationUrl = chrome.runtime.getURL("assets/html/notification.html");
              const tab = await chrome.tabs.create({ active: false, url: notificationUrl });
              g_notificationTabId = tab.id;
-             log.info("bg", `Created new notification tab: ${g_notificationTabId} for ${isTitleMigration ? "title migration" : "migration"}`);
+             log.info("bg", `Created new notification tab: ${g_notificationTabId} for refreshMutedList`);
          }
       }
       programController.tabId = g_notificationTabId; // Set the ID in programController
-      
+
       // Wait for the notification page to be fully loaded before proceeding
       log.info("bg", "Waiting for notification page to be ready...");
-      
+
       // Create a promise that resolves when the notification page is ready
       const waitForNotificationPage = new Promise((resolve, reject) => {
         // Set a timeout to avoid waiting forever
         const timeout = setTimeout(() => {
           reject(new Error("Timeout waiting for notification page to load"));
         }, 5000); // 5 second timeout
-        
+
         // Listen for a ready message from the notification page
         const messageListener = (message, sender) => {
           if (sender.tab && sender.tab.id === g_notificationTabId &&
@@ -70,9 +71,9 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
             resolve();
           }
         };
-        
+
         chrome.runtime.onMessage.addListener(messageListener);
-        
+
         // Also try to send a ping to see if the page is already loaded
         try {
           chrome.tabs.sendMessage(g_notificationTabId, { action: "ping" }, response => {
@@ -82,7 +83,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
               log.info("bg", "Ping failed, waiting for ready message: " + chrome.runtime.lastError.message);
               return;
             }
-            
+
             if (response && response.status === "ok") {
               clearTimeout(timeout);
               chrome.runtime.onMessage.removeListener(messageListener);
@@ -94,7 +95,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
           log.warn("bg", `Error sending ping to notification tab: ${e}`);
         }
       });
-      
+
       try {
         await waitForNotificationPage;
         log.info("bg", "Notification page is ready.");
@@ -102,26 +103,58 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
         log.warn("bg", `Timed out waiting for notification page: ${e}. Proceeding anyway.`);
         // We'll proceed even if we time out, as the page might still load
       }
-      
+
     } catch (e) {
-      log.err("bg", `Error handling notification tab before migration: ${e}`);
-      // Decide how to handle this - maybe alert the user?
-      sendResponse({status: 'error', message: 'Could not open notification page.'});
+      log.err("bg", `Error handling notification tab before refreshMutedList: ${e}`);
+      sendResponse({ status: 'error', message: 'Could not open notification page.' });
       return; // Abort if we can't ensure notification page exists
     }
     // --- End Notification Tab Handling ---
 
-    // Call the appropriate migration function (they handle checks internally)
-    if (isTitleMigration) {
-      programController.migrateBlockedTitlesToUnblocked();
-    } else {
-      programController.migrateBlockedToMuted();
+    // Define a function to send progress updates to the notification page
+    const updateProgress = (progress) => {
+      chrome.tabs.sendMessage(g_notificationTabId, {
+        action: "updateMutedListProgress",
+        ...progress // currentPage, currentCount
+      });
+    };
+
+    // Call scrapeAllMutedUsers with the progress callback
+    try {
+      const result = await scrapingHandler.scrapeAllMutedUsers(updateProgress);
+
+      if (result.success) {
+        await storageHandler.saveMutedUserList(result.usernames);
+        log.info("bg", `Successfully scraped and saved ${result.count} muted users.`);
+        // Send final success message to notification page
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "mutedListRefreshComplete",
+          success: true,
+          count: result.count
+        });
+      } else {
+        log.err("bg", "Error scraping muted users:", result.error);
+        // Send error message to notification page
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "mutedListRefreshComplete",
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (e) {
+      log.err("bg", `Unexpected error during refreshMutedList: ${e}`);
+      chrome.tabs.sendMessage(g_notificationTabId, {
+        action: "mutedListRefreshComplete",
+        success: false,
+        error: e.message || "Unknown error"
+      });
+    } finally {
+      // Send a response to the popup (even if there was an error)
+      sendResponse({ status: 'ok', message: 'Refresh initiated' });
     }
-    
-    // Send response immediately for this message type
-    sendResponse({status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated`});
-    return; // Don't process further as a standard ban/unban
+    return; // Stop further processing of this message
   }
+  // --- End refreshMutedList action ---
 
   // Handle early stop message
   if (message && message.earlyStop !== undefined) {
@@ -346,302 +379,6 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
     }
     if(config.enableAnalysisBeforeOperation && config.enableOnlyRequiredActions)
     {
-      // Note: Ekşi Sözlük API response doesn't include blocked authors, but it includes authors who muted and title blocked
-      // This condition doesn't provide a simplification of the following algorithm
-      
-      // scrape the authors that ${clientName} blocked
-      notificationHandler.notifyScrapeBanned();
-      let mapBlocked = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage();
-      
-      // update the list with info obtained from mapBlocked
-      notificationHandler.notifyAnalysisOnlyRequiredActions();
-      for (let name of scrapedRelations.keys()) {
-        if (mapBlocked.has(name))
-        {
-          scrapedRelations.get(name).isBannedUser = mapBlocked.get(name).isBannedUser;
-          scrapedRelations.get(name).isBannedTitle = mapBlocked.get(name).isBannedTitle;
-          scrapedRelations.get(name).isBannedMute = mapBlocked.get(name).isBannedMute;
-        }
-      }
-    }
-    
-    log.info("bg", "number of user to ban (after analysis): " + scrapedRelations.size);
-    
-    // stop if there is no user
-    if(scrapedRelations.size === 0)
-    {
-      notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (finishErrorNoAccount)");
-      return;
-    }
-    
-    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
-
-    notificationHandler.notifyOngoing(0, 0, authorNameList.length);
-    
-    for (const [name, value] of scrapedRelations)
-    {
-      if(programController.earlyStop)
-        break;
-      let authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(name);
-      let res = await relationHandler.performAction(banMode, 
-                                                    authorId,
-                                                    (!value.isBannedUser && !config.enableMute),
-                                                    (!value.isBannedTitle && config.enableTitleBan), 
-                                                    (!value.isBannedMute && config.enableMute));
-      
-      
-      authorIdList.push(authorId);
-      
-      if(res.resultType == enums.ResultType.FAIL)
-      {
-        // performAction failed because to too many request
-
-        // while waiting cooldown, send periodic notifications to user 
-        // this also provides that chrome doesn't kill the extension for being idle
-        await new Promise(async resolve => 
-        {
-          // wait 1 minute (+2 sec to ensure)
-          let waitTimeInSec = 62;
-          for(let i = 1; i <= waitTimeInSec; i++)
-          {
-            if(programController.earlyStop)
-              break;
-            
-            // send message to notification page
-            notificationHandler.notifyCooldown(waitTimeInSec-i);
-            
-            // wait 1 sec
-            await new Promise(resolve2 => { setTimeout(resolve2, 1000); }); 
-          }
-            
-          resolve();        
-        }); 
-        
-        if(!programController.earlyStop)
-        {
-          res = await relationHandler.performAction(banMode, 
-                                                    authorId,
-                                                    (!value.isBannedUser && !config.enableMute),
-                                                    (!value.isBannedTitle && config.enableTitleBan), 
-                                                    (!value.isBannedMute && config.enableMute));
-        }
-
-      }
-      
-      // send message to notification page
-      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, authorNameList.length);
-    }
-  }
-  else if(banSource === enums.BanSource.FOLLOW)
-  {
-    notificationHandler.notifyScrapeFollowers();
-
-    let scrapedRelations = await scrapingHandler.scrapeFollower(singleAuthorName);
-    log.info("bg", "number of user to ban (before analysis): " + scrapedRelations.size);
-    
-    // stop if there is no user
-    if(scrapedRelations.size === 0)
-    {
-      notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (error_NoAccount)");
-      return;
-    }
-    
-    // analysis before operation 
-    if(config.enableAnalysisBeforeOperation && config.enableProtectFollowedUsers && banMode == enums.BanMode.BAN)
-    {
-      // scrape the authors that ${clientName} follows
-      notificationHandler.notifyScrapeFollowings();
-      let mapFollowing = await scrapingHandler.scrapeFollowing(clientName);
-      
-      // remove the authors that ${clientName} follows from the list to protect  
-      notificationHandler.notifyAnalysisProtectFollowedUsers();    
-      for (let name of scrapedRelations.keys()) {
-        if (mapFollowing.has(name))
-          scrapedRelations.delete(name);
-      }
-    }
-    if(config.enableAnalysisBeforeOperation && config.enableOnlyRequiredActions)
-    {
-      // scrape the authors that ${clientName} blocked
-      notificationHandler.notifyScrapeBanned();
-      let mapBlocked = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage();
-      
-      // update the list with info obtained from mapBlocked
-      notificationHandler.notifyAnalysisOnlyRequiredActions();
-      for (let name of scrapedRelations.keys()) {
-        if (mapBlocked.has(name))
-        {
-          scrapedRelations.get(name).isBannedUser = mapBlocked.get(name).isBannedUser;
-          scrapedRelations.get(name).isBannedTitle = mapBlocked.get(name).isBannedTitle;
-          scrapedRelations.get(name).isBannedMute = mapBlocked.get(name).isBannedMute;
-        }
-      }
-    }
-      
-    log.info("bg", "number of user to ban (after analysis): " + scrapedRelations.size);
-    
-    // stop if there is no user
-    if(scrapedRelations.size === 0)
-    {
-      notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (error_NoAccount)");
-      return;
-    }
-
-    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
-    authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
-
-    notificationHandler.notifyOngoing(0, 0, authorNameList.length);
-    
-    
-    
-    for (const [name, value] of scrapedRelations)
-    {
-      if(programController.earlyStop)
-        break;
-      
-      // value.isBannedUser and others are null if analysis is not enabled
-      let res = await relationHandler.performAction(banMode, 
-                                                    value.authorId, 
-                                                    (!value.isBannedUser && !config.enableMute), 
-                                                    (!value.isBannedTitle && config.enableTitleBan), 
-                                                    (!value.isBannedMute && config.enableMute));
-      
-      if(res.resultType == enums.ResultType.FAIL)
-      {
-        // performAction failed because to too many request
-
-        // while waiting cooldown, send periodic notifications to user 
-        // this also provides that chrome doesn't kill the extension for being idle
-        await new Promise(async resolve => 
-        {
-          // wait 1 minute (+2 sec to ensure)
-          let waitTimeInSec = 62;
-          for(let j = 1; j <= waitTimeInSec; j++)
-          {
-            if(programController.earlyStop)
-              break;
-            
-            // send message to notification page
-            notificationHandler.notifyCooldown(waitTimeInSec-j);
-            
-            // wait 1 sec
-            await new Promise(resolve2 => { setTimeout(resolve2, 1000); }); 
-          }
-            
-          resolve();        
-        }); 
-        
-        if(!programController.earlyStop)
-        {
-          // value.isBannedUser and others are null if analysis is not enabled
-          res = await relationHandler.performAction(banMode, 
-                                                    value.authorId, 
-                                                    (!value.isBannedUser && !config.enableMute),
-                                                    (!value.isBannedTitle && config.enableTitleBan), 
-                                                    (!value.isBannedMute && config.enableMute));
-        }
-      }
-      
-      // send message to notification page
-      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, authorIdList.length);
-    }
-
-    
-  }
-  else if(banSource === enums.BanSource.UNDOBANALL)
-  {
-    let scrapedRelations = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage(); // names and ids will be scraped
-    
-    // stop if there is no user
-    log.info("bg", "number of user to ban " + scrapedRelations.size);
-    if(scrapedRelations.size === 0)
-    {
-      notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (error_NoAccount)");
-      return;
-    }
-
-    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
-    authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
-
-    notificationHandler.notifyOngoing(0, 0, authorNameList.length);
-    
-    for (const [name, value] of scrapedRelations)
-    {
-      if(programController.earlyStop)
-        break;
-      
-      let res = await relationHandler.performAction(banMode, value.authorId, value.isBannedUser, value.isBannedTitle, value.isBannedMute);
-      
-      if(res.resultType == enums.ResultType.FAIL)
-      {
-        // performAction failed because to too many request
-
-        // while waiting cooldown, send periodic notifications to user 
-        // this also provides that chrome doesn't kill the extension for being idle
-        await new Promise(async resolve => 
-        {
-          // wait 1 minute (+2 sec to ensure)
-          let waitTimeInSec = 62;
-          for(let j = 1; j <= waitTimeInSec; j++)
-          {
-            if(programController.earlyStop)
-              break;
-            
-            // send message to notification page
-            notificationHandler.notifyCooldown(waitTimeInSec-j);
-            
-            // wait 1 sec
-            await new Promise(resolve2 => { setTimeout(resolve2, 1000); }); 
-          }
-            
-          resolve();        
-        }); 
-        
-        if(!programController.earlyStop)
-          res = await relationHandler.performAction(banMode, banMode, value.authorId, value.isBannedUser, value.isBannedTitle, value.isBannedMute);
-      }
-      
-      // send message to notification page
-      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, authorIdList.length);
-    }
-  }
-  
-  else if(banSource === enums.BanSource.TITLE)
-  {
-    notificationHandler.notifyScrapeTitle();
-
-    // scrapedRelations does not hold duplicated records, scraping handler is responsible to keep it clean
-    let scrapedRelations = await scrapingHandler.scrapeAuthorsFromTitle(titleName, titleId, timeSpecifier);
-    log.info("bg", "number of user to ban (before analysis): " + scrapedRelations.size);
-    
-    // stop if there is no user
-    if(scrapedRelations.size === 0)
-    {
-      notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (error_NoAccount)");
-      return;
-    }
-    
-    // analysis before operation 
-    if(config.enableAnalysisBeforeOperation && config.enableProtectFollowedUsers && banMode == enums.BanMode.BAN)
-    {
-      // scrape the authors that ${clientName} follows
-      notificationHandler.notifyScrapeFollowings();
-      let mapFollowing = await scrapingHandler.scrapeFollowing(clientName);
-      
-      // remove the authors that ${clientName} follows from the list to protect  
-      notificationHandler.notifyAnalysisProtectFollowedUsers();    
-      for (let name of scrapedRelations.keys()) {
-        if (mapFollowing.has(name))
-          scrapedRelations.delete(name);
-      }
-    }
-    if(config.enableAnalysisBeforeOperation && config.enableOnlyRequiredActions)
-    {
       // scrape the authors that ${clientName} blocked
       notificationHandler.notifyScrapeBanned();
       let mapBlocked = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage();
@@ -785,8 +522,7 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
     eksi_sozluk_url: config.EksiSozlukURL,
     send_data: config.sendData,
     enable_noob_ban: config.enableNoobBan,
-    enable_mute: config.enableMute,
-    enable_title_ban: config.enableTitleBan,
+    enable_mute: config.enableTitleBan,
     enable_anaylsis_before_operations: config.enableAnalysisBeforeOperation,
     enable_only_required_actions: config.enableOnlyRequiredActions,
     enable_protect_followed_users: config.enableProtectFollowedUsers,
@@ -839,4 +575,3 @@ chrome.runtime.onInstalled.addListener(async (details) =>
     let tab = await chrome.tabs.create({ url: chrome.runtime.getURL("assets/html/welcome.html") });
   }
 });
-
