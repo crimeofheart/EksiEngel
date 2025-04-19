@@ -97,22 +97,26 @@ body {
     gap: 10px; /* Space between buttons within a group */
 }
 
-.button-group button {
+.button-group button.btn-green-candy:not(#earlyStop) {
     flex-grow: 1; /* Allow buttons within group to grow */
     min-width: 200px; /* Minimum width for buttons within group */
     text-align: center;
     padding: 8px !important; /* Adjust padding */
-    background-color: #5086bd;
-    border: 1px solid #000000; /* Adjusted border */
-    color: white;
     cursor: pointer;
     font-size: 14px;
     border-radius: 4px;
     transition: background-color 0.2s ease;
+    /* Applied desired styles with higher specificity */
+    background-color: #4CAF50; /* Green */
+    color: #000000; /* Black */
+    border: 1px solid #388E3C; /* Dark Green */
 }
 
-.button-group button:hover {
-  background-color: #3a6a9a; /* Darker shade on hover */
+.button-group button.btn-green-candy:not(#earlyStop):hover {
+  /* Maintain desired styles on hover */
+  background-color: #4CAF50; /* Green */
+  color: #000000; /* Black */
+  border: 1px solid #388E3C; /* Dark Green */
 }
 
 .tables-section {
@@ -176,3 +180,13 @@ tbody tr:nth-child(even) {
         min-width: 100%;
     }
 }
+
+/* Ensure green styling for target buttons with maximum specificity in notification.html */
+
+.buttons-section button.btn.btn-dark.btn-green-candy:not(#earlyStop):hover,
+.buttons-section button.btn.btn.dark.btn-green-candy:not(#earlyStop):active {
+    background-color: #45a049 !important; /* Darker Green */
+    color: #000000 !important; /* Black */
+    border: 1px solid #388E3C !important; /* Dark Green */
+}
+

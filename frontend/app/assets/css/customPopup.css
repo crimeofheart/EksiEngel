@@ -2,7 +2,6 @@
 
 body {
   width: 380px; /* Adjust body width for better layout */
-  padding: 2px; /* Reduced padding */
   font-family: sans-serif; /* Basic font */
 }
 
@@ -25,28 +24,46 @@ img {
   text-align: center; /* Center buttons within the section */
 }
 
-.button-section button {
+.button-section button.btn-green-candy {
   display: block; /* Make buttons block for full width in their section */
   width: 98%; /* Increased width slightly */
   margin: 2px auto; /* Reduced vertical margin */
   padding: 8px !important; /* Adjust padding */
-  background-color: #5086bd;
-  border: 1px solid #000000; /* Adjusted border */
-  color: white;
   cursor: pointer;
   font-size: 14px;
   border-radius: 4px;
   transition: background-color 0.2s ease;
+  /* Applied desired styles with higher specificity */
+  background-color: #4CAF50; /* Green */
+  color: #000000; /* Black */
+  border: 1px solid #388E3C; /* Dark Green */
 }
 
-.button-section button:hover {
-  background-color: #3a6a9a; /* Darker shade on hover */
+.button-section button.btn-green-candy:hover {
+  /* Maintain desired styles on hover */
+  background-color: #45a049 !important; /* Darker Green */
+  color: #000000 !important; /* Black */
+  border: 1px solid #388E3C !important; /* Dark Green */
 }
 
 .button-group {
   display: flex; /* Use flexbox for side-by-side buttons */
   justify-content: space-between; /* Space out buttons */
   align-items: center;
+} /* Close .button-group */
+
+/* Ensure green styling for target buttons with maximum specificity in popup.html */
+.button-section button.btn.btn-dark.btn-green-candy {
+    background-color: #4CAF50; /* Green */
+    color: #000000; /* Black */
+    border: 1px solid #388E3C; /* Dark Green */
+}
+
+.button-section button.btn.btn-dark.btn-green-candy:hover,
+.button-section button.btn.btn-dark.btn-green-candy:active {
+    background-color: #4CAF50; /* Green */
+    color: #000000; /* Black */
+    border: 1px solid #388E3C; /* Dark Green */
 }
 
 .button-group button {
@@ -70,4 +87,24 @@ img {
   font-size: 0.9em; /* Reduced font size */
   color: #333;
   min-height: 1.2em; /* Ensure minimum height even when empty */
+}
+
+.btn-green-candy {
+    cursor: pointer;
+    text-decoration: none;
+    padding: 8px 18px; /* Keep existing custom padding */
+    font-size: 12px; /* From .btn */
+    line-height: 19px; /* From .btn */
+    text-transform: uppercase; /* From .btn */
+    font-family: 'Montserrat', sans-serif; /* From .btn */
+    font-weight: 400; /* From .btn */
+    letter-spacing: 3px; /* From .btn */
+    transition: all .4s ease-in-out; /* From .btn */
+    /* New styles */
+    background-color: #4CAF50; /* Green */
+    color: #000000; /* Black */
+    border: 1px solid #388E3C; /* Dark Green */
+    /* Keep existing styles that don't conflict */
+    border-radius: 3px; /* From .switch-candy a */
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.45); /* From .switch-candy a */
 }
