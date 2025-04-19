@@ -13,16 +13,17 @@ import {handleEksiSozlukURL} from './urlHandler.js';
 import { notificationHandler } from './notificationHandler.js';
 import { storageHandler } from './storageHandler.js';
 
-
 log.info("bg", "initialized");
 let g_notificationTabId = 0;
 
 chrome.runtime.onMessage.addListener(async function messageListener_Popup(message, sender, sendResponse) {
   log.info("bg", "Received message:", message);
 
-  // --- Handle refreshMutedList action ---
-  if (message && message.action === "refreshMutedList") {
-    log.info("bg", "Received refreshMutedList request from popup.");
+  const actionsRequiringNotification = ["startMigration", "startTitleMigration", "refreshMutedList"];
+
+  // Check if the message requires the notification tab
+  if (message && actionsRequiringNotification.includes(message.action)) {
+    log.info("bg", `Handling action ${message.action} requiring notification tab.`);
 
     // --- Ensure Notification Tab Exists (Standard Logic) ---
     try {
@@ -47,7 +48,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
              const notificationUrl = chrome.runtime.getURL("assets/html/notification.html");
              const tab = await chrome.tabs.create({ active: false, url: notificationUrl });
              g_notificationTabId = tab.id;
-             log.info("bg", `Created new notification tab: ${g_notificationTabId} for refreshMutedList`);
+             log.info("bg", `Created new notification tab: ${g_notificationTabId} for ${message.action}`);
          }
       }
       programController.tabId = g_notificationTabId; // Set the ID in programController
@@ -105,56 +106,73 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
       }
 
     } catch (e) {
-      log.err("bg", `Error handling notification tab before refreshMutedList: ${e}`);
+      log.err("bg", `Error handling notification tab before ${message.action}: ${e}`);
       sendResponse({ status: 'error', message: 'Could not open notification page.' });
       return; // Abort if we can't ensure notification page exists
     }
     // --- End Notification Tab Handling ---
 
-    // Define a function to send progress updates to the notification page
-    const updateProgress = (progress) => {
-      chrome.tabs.sendMessage(g_notificationTabId, {
-        action: "updateMutedListProgress",
-        ...progress // currentPage, currentCount
-      });
-    };
+    if (message.action === "startMigration" || message.action === "startTitleMigration") {
+      const isTitleMigration = message.action === "startTitleMigration";
+      log.info("bg", `Handling ${isTitleMigration ? "title " : ""}migration request from popup.`);
 
-    // Call scrapeAllMutedUsers with the progress callback
-    try {
-      const result = await scrapingHandler.scrapeAllMutedUsers(updateProgress);
-
-      if (result.success) {
-        await storageHandler.saveMutedUserList(result.usernames);
-        log.info("bg", `Successfully scraped and saved ${result.count} muted users.`);
-        // Send final success message to notification page
-        chrome.tabs.sendMessage(g_notificationTabId, {
-          action: "mutedListRefreshComplete",
-          success: true,
-          count: result.count
-        });
+      // Call the appropriate migration function (they handle checks internally)
+      if (isTitleMigration) {
+        programController.migrateBlockedTitlesToUnblocked();
       } else {
-        log.err("bg", "Error scraping muted users:", result.error);
-        // Send error message to notification page
+        programController.migrateBlockedToMuted();
+      }
+
+      // Send response immediately for this message type
+      sendResponse({ status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated` });
+      return; // Don't process further as a standard ban/unban
+    } else if (message.action === "refreshMutedList") {
+      log.info("bg", "Handling refreshMutedList request from popup.");
+
+      // Define a function to send progress updates to the notification page
+      const updateProgress = (progress) => {
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "updateMutedListProgress",
+          ...progress // currentPage, currentCount
+        });
+      };
+
+      // Call scrapeAllMutedUsers with the progress callback
+      try {
+        const result = await scrapingHandler.scrapeAllMutedUsers(updateProgress);
+
+        if (result.success) {
+          await storageHandler.saveMutedUserList(result.usernames);
+          log.info("bg", `Successfully scraped and saved ${result.count} muted users.`);
+          // Send final success message to notification page
+          chrome.tabs.sendMessage(g_notificationTabId, {
+            action: "mutedListRefreshComplete",
+            success: true,
+            count: result.count
+          });
+        } else {
+          log.err("bg", "Error scraping muted users:", result.error);
+          // Send error message to notification page
+          chrome.tabs.sendMessage(g_notificationTabId, {
+            action: "mutedListRefreshComplete",
+            success: false,
+            error: result.error
+          });
+        }
+      } catch (e) {
+        log.err("bg", `Unexpected error during refreshMutedList: ${e}`);
         chrome.tabs.sendMessage(g_notificationTabId, {
           action: "mutedListRefreshComplete",
           success: false,
-          error: result.error
+          error: e.message || "Unknown error"
         });
+      } finally {
+        // Send a response to the popup (even if there was an error)
+        sendResponse({ status: 'ok', message: 'Refresh initiated' });
       }
-    } catch (e) {
-      log.err("bg", `Unexpected error during refreshMutedList: ${e}`);
-      chrome.tabs.sendMessage(g_notificationTabId, {
-        action: "mutedListRefreshComplete",
-        success: false,
-        error: e.message || "Unknown error"
-      });
-    } finally {
-      // Send a response to the popup (even if there was an error)
-      sendResponse({ status: 'ok', message: 'Refresh initiated' });
+      return; // Stop further processing of this message
     }
-    return; // Stop further processing of this message
   }
-  // --- End refreshMutedList action ---
 
   // Handle early stop message
   if (message && message.earlyStop !== undefined) {
@@ -359,7 +377,7 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
     if(scrapedRelations.size === 0)
     {
       notificationHandler.finishErrorNoAccount(banSource, banMode);
-      log.err("bg", "Program has been finished (finishErrorNoAccount)");
+      log.err("bg", "Program has been finished (error_NoAccount)");
       return;
     }
     
