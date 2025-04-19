@@ -57,5 +57,5 @@ Version notes: [link](https://h-enes-simsek.github.io/EksiEngel/releaseNotes.htm
 <img src="frontend/publish/ss/authorMenu.png" width="480" height="300">
 <img src="frontend/publish/ss/popup.png">
 <img src="frontend/publish/ss/authorListPage.png" width="480" height="300">
-<img src="frontend/publish/ss/notification.png" width="480" height="300">
+<img src="frontend/publish/ss/notification.png" width="480">
 </div>
