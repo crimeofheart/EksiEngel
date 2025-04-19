@@ -423,23 +423,53 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
       return;
     }
 
-    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
-    authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
+    // --- Fetch Author IDs for FAV source ---
+    notificationHandler.notifyScrapeIDs(); // Notify user about fetching IDs
+    let validScrapedRelations = new Map();
+    authorNameList = []; // Reset lists
+    authorIdList = [];
+    let favIndex = 0;
+    for (const [name, relation] of scrapedRelations) {
+      if(programController.earlyStop) break;
+      favIndex++;
+      notificationHandler.notifyScrapeIDsProgress(favIndex, scrapedRelations.size); // Update progress
+      const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(name);
+      if (authorId && authorId !== "0") {
+        relation.authorId = authorId; // Update the relation object with the fetched ID
+        validScrapedRelations.set(name, relation); // Add to the map with valid IDs
+        authorNameList.push(name); // Keep track for final summary
+        authorIdList.push(authorId);
+      } else {
+        log.warn("bg", `Could not fetch authorId for fav user: ${name}`);
+      }
+      await utils.sleep(50); // Small delay between ID fetches
+    }
+    scrapedRelations = validScrapedRelations; // Use the map with valid IDs
+    log.info("bg", "number of user to ban (after fetching IDs): " + scrapedRelations.size);
+    // --- End Fetch Author IDs ---
 
-    notificationHandler.notifyOngoing(0, 0, authorNameList.length);
-    
+    // stop if there is no user after fetching IDs
+    if(scrapedRelations.size === 0)
+    {
+      notificationHandler.finishErrorNoAccount(banSource, banMode);
+      log.err("bg", "Program has been finished (error_NoAccount after fetching IDs)");
+      return;
+    }
+
+    notificationHandler.notifyOngoing(0, 0, scrapedRelations.size); // Update total count
+
     for (const [name, value] of scrapedRelations)
     {
       if(programController.earlyStop)
         break;
-      
+
       // value.isBannedUser and others are null if analysis is not enabled
-      let res = await relationHandler.performAction(banMode, 
-                                                    value.authorId, 
-                                                    (!value.isBannedUser && !config.enableMute), 
-                                                    (!value.isBannedTitle && config.enableTitleBan), 
+      let res = await relationHandler.performAction(banMode,
+                                                    value.authorId, // Use the fetched authorId
+                                                    (!value.isBannedUser && !config.enableMute),
+                                                    (!value.isBannedTitle && config.enableTitleBan),
                                                     (!value.isBannedMute && config.enableMute));
-      
+
       if(res.resultType == enums.ResultType.FAIL)
       {
         // performAction failed because to too many request
@@ -477,10 +507,215 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
       }
       
       // send message to notification page
-      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, authorIdList.length);
+      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, scrapedRelations.size); // Use size of map with valid IDs
     }
   }
-  
+  else if (banSource === enums.BanSource.FOLLOW)
+  {
+    notificationHandler.notifyScrapeFollowers(); // Notify user
+
+    let scrapedRelations = await scrapingHandler.scrapeFollower(singleAuthorName); // Scrape followers of the target author
+    log.info("bg", "number of followers to ban (before analysis): " + scrapedRelations.size);
+
+    // stop if there is no user
+    if(scrapedRelations.size === 0)
+    {
+      notificationHandler.finishErrorNoAccount(banSource, banMode);
+      log.err("bg", "Program has been finished (error_NoAccount - followers)");
+      return;
+    }
+
+    // Optional Analysis (similar to FAV)
+    if(config.enableAnalysisBeforeOperation && config.enableProtectFollowedUsers && banMode == enums.BanMode.BAN)
+    {
+      notificationHandler.notifyScrapeFollowings();
+      let mapFollowing = await scrapingHandler.scrapeFollowing(clientName);
+      notificationHandler.notifyAnalysisProtectFollowedUsers();
+      for (let name of scrapedRelations.keys()) {
+        if (mapFollowing.has(name))
+          scrapedRelations.delete(name);
+      }
+    }
+    if(config.enableAnalysisBeforeOperation && config.enableOnlyRequiredActions)
+    {
+      notificationHandler.notifyScrapeBanned();
+      let mapBlocked = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage();
+      notificationHandler.notifyAnalysisOnlyRequiredActions();
+      for (let name of scrapedRelations.keys()) {
+        if (mapBlocked.has(name))
+        {
+          // Ensure the relation object exists before trying to update it
+          if (!scrapedRelations.has(name)) continue;
+          scrapedRelations.get(name).isBannedUser = mapBlocked.get(name).isBannedUser;
+          scrapedRelations.get(name).isBannedTitle = mapBlocked.get(name).isBannedTitle;
+          scrapedRelations.get(name).isBannedMute = mapBlocked.get(name).isBannedMute;
+        }
+      }
+    }
+
+    log.info("bg", "number of followers to ban (after analysis): " + scrapedRelations.size);
+
+    // stop if there is no user after analysis
+    if(scrapedRelations.size === 0)
+    {
+      notificationHandler.finishErrorNoAccount(banSource, banMode);
+      log.err("bg", "Program has been finished (error_NoAccount - followers after analysis)");
+      return;
+    }
+
+    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
+    authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
+
+    notificationHandler.notifyOngoing(0, 0, scrapedRelations.size);
+
+    for (const [name, value] of scrapedRelations)
+    {
+      if(programController.earlyStop) break;
+
+      // Ensure authorId is valid before proceeding
+      if (!value.authorId || value.authorId === "0") {
+          log.warn("bg", `Skipping follower with invalid ID: ${name}`);
+          // Decrement performedAction counter if necessary, or adjust total count initially
+          continue;
+      }
+
+      let res = await relationHandler.performAction(banMode,
+                                                    value.authorId,
+                                                    (!value.isBannedUser && !config.enableMute),
+                                                    (!value.isBannedTitle && config.enableTitleBan),
+                                                    (!value.isBannedMute && config.enableMute));
+
+      if(res.resultType == enums.ResultType.FAIL)
+      {
+        // Cooldown logic (copied from FAV)
+        await new Promise(async resolve =>
+        {
+          let waitTimeInSec = 62;
+          for(let j = 1; j <= waitTimeInSec; j++)
+          {
+            if(programController.earlyStop) break;
+            notificationHandler.notifyCooldown(waitTimeInSec-j);
+            await new Promise(resolve2 => { setTimeout(resolve2, 1000); });
+          }
+          resolve();
+        });
+
+        if(!programController.earlyStop)
+        {
+          res = await relationHandler.performAction(banMode,
+                                                    value.authorId,
+                                                    (!value.isBannedUser && !config.enableMute),
+                                                    (!value.isBannedTitle && config.enableTitleBan),
+                                                    (!value.isBannedMute && config.enableMute));
+        }
+      }
+
+      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, scrapedRelations.size);
+    }
+  }
+  else if (banSource === enums.BanSource.TITLE)
+  {
+    notificationHandler.notifyScrapeTitleAuthors(timeSpecifier); // Notify user
+
+    let scrapedRelations = await scrapingHandler.scrapeAuthorsFromTitle(titleName, titleId, timeSpecifier);
+    log.info("bg", `number of authors in title (${timeSpecifier}) to ban (before analysis): ${scrapedRelations.size}`);
+
+    // stop if there is no user
+    if(scrapedRelations.size === 0)
+    {
+      notificationHandler.finishErrorNoAccount(banSource, banMode);
+      log.err("bg", "Program has been finished (error_NoAccount - title authors)");
+      return;
+    }
+
+    // Optional Analysis (similar to FAV/FOLLOW)
+    if(config.enableAnalysisBeforeOperation && config.enableProtectFollowedUsers && banMode == enums.BanMode.BAN)
+    {
+      notificationHandler.notifyScrapeFollowings();
+      let mapFollowing = await scrapingHandler.scrapeFollowing(clientName);
+      notificationHandler.notifyAnalysisProtectFollowedUsers();
+      for (let name of scrapedRelations.keys()) {
+        if (mapFollowing.has(name))
+          scrapedRelations.delete(name);
+      }
+    }
+    if(config.enableAnalysisBeforeOperation && config.enableOnlyRequiredActions)
+    {
+      notificationHandler.notifyScrapeBanned();
+      let mapBlocked = await scrapingHandler.scrapeAuthorNamesFromBannedAuthorPage();
+      notificationHandler.notifyAnalysisOnlyRequiredActions();
+      for (let name of scrapedRelations.keys()) {
+        if (mapBlocked.has(name))
+        {
+           // Ensure the relation object exists before trying to update it
+          if (!scrapedRelations.has(name)) continue;
+          scrapedRelations.get(name).isBannedUser = mapBlocked.get(name).isBannedUser;
+          scrapedRelations.get(name).isBannedTitle = mapBlocked.get(name).isBannedTitle;
+          scrapedRelations.get(name).isBannedMute = mapBlocked.get(name).isBannedMute;
+        }
+      }
+    }
+
+    log.info("bg", `number of authors in title (${timeSpecifier}) to ban (after analysis): ${scrapedRelations.size}`);
+
+    // stop if there is no user after analysis
+    if(scrapedRelations.size === 0)
+    {
+      notificationHandler.finishErrorNoAccount(banSource, banMode);
+      log.err("bg", "Program has been finished (error_NoAccount - title authors after analysis)");
+      return;
+    }
+
+    authorNameList = Array.from(scrapedRelations, ([name, value]) => name);
+    authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
+
+    notificationHandler.notifyOngoing(0, 0, scrapedRelations.size);
+
+    for (const [name, value] of scrapedRelations)
+    {
+      if(programController.earlyStop) break;
+
+       // Ensure authorId is valid before proceeding
+      if (!value.authorId || value.authorId === "0") {
+          log.warn("bg", `Skipping title author with invalid ID: ${name}`);
+          continue;
+      }
+
+      let res = await relationHandler.performAction(banMode,
+                                                    value.authorId,
+                                                    (!value.isBannedUser && !config.enableMute),
+                                                    (!value.isBannedTitle && config.enableTitleBan),
+                                                    (!value.isBannedMute && config.enableMute));
+
+      if(res.resultType == enums.ResultType.FAIL)
+      {
+        // Cooldown logic (copied from FAV)
+        await new Promise(async resolve =>
+        {
+          let waitTimeInSec = 62;
+          for(let j = 1; j <= waitTimeInSec; j++)
+          {
+            if(programController.earlyStop) break;
+            notificationHandler.notifyCooldown(waitTimeInSec-j);
+            await new Promise(resolve2 => { setTimeout(resolve2, 1000); });
+          }
+          resolve();
+        });
+
+        if(!programController.earlyStop)
+        {
+          res = await relationHandler.performAction(banMode,
+                                                    value.authorId,
+                                                    (!value.isBannedUser && !config.enableMute),
+                                                    (!value.isBannedTitle && config.enableTitleBan),
+                                                    (!value.isBannedMute && config.enableMute));
+        }
+      }
+
+      notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, scrapedRelations.size);
+    }
+  }
+
   let successfulAction = relationHandler.successfulAction;
   let performedAction = relationHandler.performedAction;
   

@@ -57,7 +57,10 @@ class NotificationHandler
       
       await sendMessagePromise;
     } catch (err) {
-      log.warn("notification", "Error sending notification: " + err + " :: " + JSON.stringify(message));
+      // Only log warnings for non-cooldown messages to avoid console spam during cooldown countdown
+      if (message.status !== enums.NotificationType.COOLDOWN) {
+        log.warn("notification", "Error sending notification: " + err + " :: " + JSON.stringify(message));
+      }
       // Don't throw - we want to continue even if notifications fail
     }
  
@@ -90,8 +93,15 @@ class NotificationHandler
   notifyAnalysisOnlyRequiredActions = () => {
     this.#notify("Daha önce engellediğiniz yazarlar, engellenecek yazarlar listesinden çıkarılıyor.");
   }
-  notifyScrapeTitle = () => {
-    this.#notify("Hedef başlıkta entry'si bulunan yazarlar toplanıyor.");
+  notifyScrapeIDs = () => {
+    this.#notify("Yazar ID'leri toplanıyor (Bu işlem biraz sürebilir)...");
+  }
+  notifyScrapeIDsProgress = (index, total) => {
+    this.#notify(`Yazar ID'leri toplanıyor (${index}/${total})...`);
+  }
+  notifyScrapeTitleAuthors = (timeSpecifier) => {
+    let timeText = timeSpecifier === enums.TimeSpecifier.ALL ? "(tümü)" : "(son 24 saat)";
+    this.#notify(`Hedef başlıkta ${timeText} entry'si bulunan yazarlar toplanıyor.`);
   }
 
   #finish = (banSource, banMode, statusText, errorText, successfulAction, performedAction, plannedAction) => {
