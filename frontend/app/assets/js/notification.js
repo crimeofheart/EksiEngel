@@ -177,6 +177,12 @@ async function handleRefreshMutedList() {
   console.log("notification.js", "Refresh muted list button clicked.");
   commHandler.sendAnalyticsData({ click_type: enums.ClickType.EXTENSION_MENU_REFRESH_MUTED });
 
+  // Disable buttons while the process is running
+  const refreshButton = document.getElementById('refreshMutedList');
+  const earlyStopButton = document.getElementById('earlyStop');
+  if (refreshButton) refreshButton.disabled = true;
+  if (earlyStopButton) earlyStopButton.disabled = true; // Disable early stop button initially
+
   updateButtonStatus("Initiating muted list refresh...", false, 0);
 
   // Send message to background script to handle the refresh process
@@ -184,9 +190,13 @@ async function handleRefreshMutedList() {
     if (chrome.runtime.lastError) {
       console.error("notification.js: Error sending refreshMutedList message:", chrome.runtime.lastError.message);
       updateButtonStatus("Error initiating refresh: " + chrome.runtime.lastError.message, true, 5000);
+      // Re-enable buttons on error
+      if (refreshButton) refreshButton.disabled = false;
+      if (earlyStopButton) earlyStopButton.disabled = false;
     } else {
       console.log("notification.js: refreshMutedList message sent successfully.");
       // Background script will handle progress and send updates
+      // Early stop button will be re-enabled by the mutedListRefreshComplete handler
     }
   });
 }
@@ -247,7 +257,6 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
       // Update the muted user count span dynamically
       if (mutedUserCountSpan) {
-      const mutedUserCountSpan = document.getElementById("mutedUserCount");
         mutedUserCountSpan.textContent = message.currentCount;
       }
 
@@ -263,7 +272,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
   // Handle mutedListRefreshComplete messages (This seems specific to a different process, keeping for now)
   if (message && message.action === "mutedListRefreshComplete") {
-    console.log(`Muted list refresh complete: Success=${message.success}, Count=${message.count}, Error=${message.error}`);
+    console.log(`Muted list refresh complete: Success=${message.success}, StoppedEarly=${message.stoppedEarly}, Count=${message.count}, Error=${message.error}`);
 
     // Update the UI elements
     const migrationBar = document.getElementById("migrationBar"); // Assuming these elements exist for this specific progress
@@ -272,37 +281,62 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     const migrationStatusText = document.getElementById("migrationStatusText");
     const migrationResultText = document.getElementById("migrationResultText");
 
+    const mutedUserCountSpan = document.getElementById("mutedUserCount"); // Get reference here
+
     if (migrationBar && migrationBarText) {
-      // Set progress bar to 100% or 0% depending on success
-      migrationBar.style.width = message.success ? "100%" : "0%";
-      migrationBarText.innerHTML = message.success ? "%100" : "%0";
+      // Set progress bar based on success or early stop
+      migrationBar.style.width = message.success ? "100%" : (message.stoppedEarly ? `${(message.count / (message.total || 1)) * 100}%` : "0%"); // Estimate progress on stop if total is available
+      migrationBarText.innerHTML = message.success ? "%100" : (message.stoppedEarly ? `%${Math.round((message.count / (message.total || 1)) * 100)}` : "%0");
     }
 
-      // Update the muted user count span with the final count
+      // Update the muted user count span with the final count (or current count on stop)
       if (mutedUserCountSpan) {
-      const mutedUserCountSpan = document.getElementById("mutedUserCount");
         mutedUserCountSpan.textContent = message.count;
       }
 
     if (migrationStatusText) {
-      // Update status text based on success
-      migrationStatusText.innerHTML = message.success ? "İşlem tamamlandı!" : "İşlem başarısız!";
+      // Update status text based on success, early stop, or error
+      if (message.success) {
+        migrationStatusText.innerHTML = "İşlem tamamlandı!";
+      } else if (message.stoppedEarly) {
+        migrationStatusText.innerHTML = "İşlem kullanıcı tarafından durduruldu.";
+      } else {
+        migrationStatusText.innerHTML = "İşlem başarısız!";
+      }
     }
 
     if (migrationProgressText) {
-      migrationProgressText.innerHTML = message.success ? `Toplam: ${message.count}` : "";
+      migrationProgressText.innerHTML = message.success ? `Toplam: ${message.count}` : (message.stoppedEarly ? `İşlenen: ${message.count}` : "");
     }
 
     if (migrationResultText) {
       // Show result or error message
-      migrationResultText.innerHTML = message.success ? `Başarıyla alındı: ${message.count}` : `Hata: ${message.error || "Bilinmeyen hata"}`;
+      if (message.success) {
+        migrationResultText.innerHTML = `Başarıyla alındı: ${message.count}`;
+      } else if (message.stoppedEarly) {
+         migrationResultText.innerHTML = `Durduruldu. İşlenen: ${message.count}`;
+      }
+      else {
+        migrationResultText.innerHTML = `Hata: ${message.error || "Bilinmeyen hata"}`;
+      }
     }
 
-    sendResponse({ status: "ok" });
-    return true; // Keep channel open for async response
-  }
-
-  // Handle progress messages containing the total count for muted users
+    // Re-enable the buttons
+    const earlyStopButton = document.getElementById("earlyStop");
+    const refreshButton = document.getElementById('refreshMutedList');
+    if (earlyStopButton) {
+      earlyStopButton.textContent = "ERKEN DURDUR";
+      earlyStopButton.disabled = false;
+    }
+    if (refreshButton) {
+      refreshButton.disabled = false;
+    }
+ 
+     sendResponse({ status: "ok" });
+     return true; // Keep channel open for async response
+   }
+ 
+   // Handle progress messages containing the total count for muted users
   if (message && typeof message === 'string' && message.includes("Total ")) {
     console.log(`Received progress message: ${message}`);
     const totalMatch = message.match(/Total (\d+)/);

@@ -115,12 +115,37 @@ function handleRefreshMutedList() { // Changed to non-async
       const currentCount = parseInt(mutedUserCountSpan.textContent) || 0;
       exportMutedListCSVButton.disabled = currentCount === 0;
     } else {
-      log.info("popup.js: refreshMutedList message sent successfully.");
+      log.info("popup.js: refreshMutedList message sent successfully. Waiting for completion message.");
       // Background script will open notification tab and handle progress
-      window.close(); // Close popup after initiating
+      // Do NOT close the window immediately, wait for completion message
     }
   });
 }
+
+// Add a listener for messages from the background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "mutedListRefreshComplete") {
+    log.info("popup.js: Received mutedListRefreshComplete message.", request);
+    refreshMutedListButton.disabled = false; // Re-enable the button
+
+    if (request.success) {
+      updateStatus(`Muted list refreshed. Found ${request.count} users.`, false, 5000);
+      // Update the displayed count
+      if (mutedUserCountSpan) {
+        mutedUserCountSpan.textContent = request.count;
+      }
+      // Re-enable export button if count > 0
+      exportMutedListCSVButton.disabled = request.count === 0;
+    } else {
+      const errorMessage = request.stoppedEarly ? "Muted list refresh stopped by user." : `Muted list refresh failed: ${request.error}`;
+      updateStatus(errorMessage, true, 5000);
+      // Re-enable export button based on current count in case of error
+      const currentCount = parseInt(mutedUserCountSpan.textContent) || 0;
+      exportMutedListCSVButton.disabled = currentCount === 0;
+    }
+    sendResponse({ status: "ok" }); // Acknowledge the message
+  }
+});
 
 async function handleExportMutedList() {
   log.info("popup.js", "Export muted list button clicked.");

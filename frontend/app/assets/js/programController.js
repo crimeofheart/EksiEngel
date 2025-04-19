@@ -15,8 +15,9 @@ class ProgramController
   { 
     this._earlyStop = false;
     this._migrationInProgress = false;
+    this._isMutedListRefreshInProgress = false; // New flag for muted list refresh
 
-    this._tabId = 0; 
+    this._tabId = 0;
   }
   
   get isActive()
@@ -48,6 +49,8 @@ class ProgramController
     {
       if (this._migrationInProgress) {
         log.info("progctrl", "early stop received during migration process.");
+      } else if (this._isMutedListRefreshInProgress) { // Check for muted list refresh
+        log.info("progctrl", "early stop received during muted list refresh process.");
       } else if (processQueue.isRunning) {
         log.info("progctrl", "early stop received, number of waiting processes in the queue: " + processQueue.size);
       } else {
@@ -57,6 +60,19 @@ class ProgramController
     else
     {
       log.info("progctrl", "early stop flag cleared.");
+    }
+  }
+
+  get isMutedListRefreshInProgress() {
+    return this._isMutedListRefreshInProgress;
+  }
+
+  set isMutedListRefreshInProgress(val) {
+    this._isMutedListRefreshInProgress = val;
+    if (val) {
+      log.info("progctrl", "Muted list refresh process started.");
+    } else {
+      log.info("progctrl", "Muted list refresh process finished.");
     }
   }
 

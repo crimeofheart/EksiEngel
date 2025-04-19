@@ -129,6 +129,25 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
     } else if (message.action === "refreshMutedList") {
       log.info("bg", "Handling refreshMutedList request from popup.");
 
+      // Check if a refresh process is already in progress
+      if (programController.isMutedListRefreshInProgress) {
+        log.warn("bg", "Muted list refresh is already in progress. Ignoring new request.");
+        // Optionally send a message back to the notification page to indicate this
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "mutedListRefreshComplete", // Use the complete action to signal state
+          success: false,
+          error: "Muted list refresh is already running."
+        });
+        sendResponse({ status: 'error', message: 'Refresh already in progress' });
+        return; // Stop here if already running
+      }
+
+      // Set the flag to indicate the process is starting
+      programController.isMutedListRefreshInProgress = true;
+      // Reset early stop flag before starting a new process
+      programController.earlyStop = false;
+
+
       // Define a function to send progress updates to the notification page
       const updateProgress = async (progress) => {
         // Send progress update to the notification page
@@ -157,13 +176,27 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
             count: result.count
           });
         } else {
-          log.err("bg", "Error scraping muted users:", result.error);
-          // Send error message to notification page
-          chrome.tabs.sendMessage(g_notificationTabId, {
-            action: "mutedListRefreshComplete",
-            success: false,
-            error: result.error
-          });
+          // Check if the process was stopped early by the user
+          if (result.stoppedEarly) {
+            log.info("bg", "Muted user scraping stopped by user.");
+            // Send a specific message to notification page for early stop
+            chrome.tabs.sendMessage(g_notificationTabId, {
+              action: "mutedListRefreshComplete",
+              success: false, // Still technically not a full success
+              stoppedEarly: true, // Indicate it was stopped early
+              count: result.count || 0, // Send current count if available
+              error: result.error || "Process stopped by user" // Provide a user-friendly message
+            });
+          } else {
+            // Handle actual errors during scraping
+            log.err("bg", "Error scraping muted users:", result.error);
+            // Send error message to notification page
+            chrome.tabs.sendMessage(g_notificationTabId, {
+              action: "mutedListRefreshComplete",
+              success: false,
+              error: result.error
+            });
+          }
         }
       } catch (e) {
         log.err("bg", `Unexpected error during refreshMutedList: ${e}`);
@@ -173,7 +206,9 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
           error: e.message || "Unknown error"
         });
       } finally {
-        // Send a response to the popup (even if there was an error)
+        // Ensure the flag is reset when the process finishes (success, error, or early stop)
+        programController.isMutedListRefreshInProgress = false;
+        // Send a response to the popup (even if there was an error or early stop)
         sendResponse({ status: 'ok', message: 'Refresh initiated' });
       }
       return; // Stop further processing of this message

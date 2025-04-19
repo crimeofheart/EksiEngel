@@ -3,6 +3,7 @@ import * as enums from './enums.js';
 import {JSDOM} from './jsdom.js';
 import {config} from './config.js';
 import * as utils from './utils.js';
+import { programController } from './programController.js'; // Import programController
 
 
 function Relation(authorName, authorId, isBannedUser, isBannedTitle, isBannedMute, doIFollow, doTheyFollowMe) {
@@ -530,6 +531,11 @@ class ScrapingHandler
 
     try {
       while (!isLast) {
+        // Check for early stop request
+        if (programController.earlyStop) {
+          log.info("scraping", "Muted user scraping stopped by user.");
+          return { success: false, error: 'Process stopped by user', stoppedEarly: true };
+        }
         index++;
         let attempt = 0;
         let success = false;
