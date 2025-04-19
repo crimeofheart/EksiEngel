@@ -181,7 +181,7 @@ async function handleRefreshMutedList() {
   const refreshButton = document.getElementById('refreshMutedList');
   const earlyStopButton = document.getElementById('earlyStop');
   if (refreshButton) refreshButton.disabled = true;
-  if (earlyStopButton) earlyStopButton.disabled = true; // Disable early stop button initially
+
 
   updateButtonStatus("Initiating muted list refresh...", false, 0);
 
@@ -419,6 +419,10 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
       // Update progress bar for ONGOING status
       if (notification.status === enums.NotificationType.ONGOING && notification.plannedAction > 0) {
         const percentage = Math.round((notification.performedAction / notification.plannedAction) * 100);
+        const earlyStopButton = document.getElementById("earlyStop");
+        if (earlyStopButton) {
+            earlyStopButton.disabled = false;
+        }
         if (progressBar) progressBar.style.width = percentage + "%";
         if (progressBarText) progressBarText.innerHTML = "%" + percentage;
         if (progressText) progressText.innerHTML = "İşlenen: " + notification.performedAction + "/" + notification.plannedAction + " Başarılı: " + notification.successfulAction;
