@@ -1,113 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-
-  <style>
-  .containerCurrentProgress{margin-left:160px; margin-right:160px; margin-top:100px}
-  .containerTables{margin-left:160px; margin-right:160px;}
-  .bar{padding:0.01em}
-  .bar-container{color:#000!important;background-color:#f1f1f1!important}
-  .green{color:#fff!important;background-color:#4CAF50!important}
-  .grid-container{display: inline-grid;grid-template-columns: auto auto;padding: 10px;}
-  .grid-item {text-align: left; font-family: 'Montserrat', sans-serif; margin: 2px; font-size: 1.3em;}
-  table {border: 1px solid; font-family: 'Montserrat', sans-serif; border-collapse: collapse;}
-  thead {background-color: #1f1f1f; color: white;}
-  th, td {border: 1px solid black; padding: 8px;}
-  </style>
-
   <meta charset="UTF-8">
-  <title>Ekşi Engel</title>
+  <title>Ekşi Engel Bildirim</title>
   <link rel="stylesheet" href="../css/buttons.css">
   <link rel="stylesheet" href="../css/footer.css">
+  <link rel="stylesheet" href="../css/customNotification.css"> <!-- New CSS file for notification page specific styles -->
   <script type="module" src="../js/notification.js"></script>
   <script type="module" src="../js/notificationHandler.js"></script>
 </head>
-<body> 
+<body>
 
-<div class="containerCurrentProgress">
-  
-  <div class="bar-container">
-    <div id="bar" class="bar green" style="height:24px;width:0%"></div>
-  </div>
-  
-  <p id="barText" style="font-size: 0.9em;">0%</p> <!-- Existing bar text -->
-  <p id="progressText" style="font-size: 0.9em;"></p> <!-- Added general progress text -->
-
-  <!-- Migration Progress Section -->
-  <div id="migrationProgressSection" style="margin-top: 15px; border: 1px dashed #ccc; padding: 10px;">
-    <h4>Engellenenleri Sessize Alma Durumu:</h4>
+<div class="container">
+  <!-- Unified Status Bar Section -->
+  <div id="unifiedStatusSection" class="status-section">
+    <h4>İşlem Durumu:</h4>
     <div class="bar-container">
-      <div id="migrationBar" class="bar green" style="height:18px;width:0%"></div>
+      <div id="progressBar" class="bar green" style="height:24px;width:0%"></div>
     </div>
-    <p id="migrationBarText" style="font-size: 0.9em;">0%</p>
-    <p id="migrationStatusText" style="font-weight: bold;">İşlem bekleniyor...</p>
-    <p id="migrationProgressText" style="font-size: 0.9em;"></p>
-    <p id="migrationResultText" style="font-size: 0.9em;"></p>
-  </div>
-  <!-- End Migration Progress Section -->
+    <p id="progressBarText" class="status-text">0%</p>
+    <p id="progressText" class="status-text"></p>
 
-
-  <!-- Added General Progress Bar (distinct from migration bar) -->
-  <div id="generalProgressSection" style="margin-top: 15px;">
-      <h4>Genel İşlem Durumu:</h4>
-      <div class="bar-container">
-          <div id="progressBar" class="bar green" style="height:18px;width:0%"></div> <!-- Added general progress bar -->
-      </div>
-      <p id="progressBarText" style="font-size: 0.9em;">0%</p> <!-- Added general progress bar text -->
-  </div>
-  <!-- End General Progress Bar -->
-
-  <div class="grid-container">
-    <div class="grid-item">Durum:</div>            <div class="grid-item"><span id="statusText">İşlem başlayacak.</span></div> <!-- Changed to span for better text handling -->
-    <div class="grid-item">Cooldown:</div>       <div class="grid-item"><span id="remainingTimeInSec" style="display: none;"></span></div> <!-- Changed to span, initially hidden -->
-    <div class="grid-item">Başarılı işlem:</div>   <div class="grid-item"><span id="successfulAction">0</span></div> <!-- Changed to span -->
-    <div class="grid-item">Gerçekleşen işlem:</div><div class="grid-item"><span id="performedAction">0</span></div> <!-- Changed to span -->
-    <div class="grid-item">Planlanan işlem:</div>  <div class="grid-item"><span id="plannedAction">0</span></div> <!-- Changed to span -->
-    <div class="grid-item">Hata:</div>             <div class="grid-item"><span id="errorText" style="color: red; display: none;"></span></div> <!-- Added error text span, initially hidden -->
+    <div class="status-details">
+      <div class="status-item">Durum: <span id="statusText">İşlem başlayacak.</span></div>
+      <div class="status-item">Bekleme Süresi: <span id="remainingTimeInSec" style="display: none;"></span></div>
+      <div class="status-item">Başarılı işlem: <span id="successfulAction">0</span></div>
+      <div class="status-item">Gerçekleşen işlem: <span id="performedAction">0</span></div>
+      <div class="status-item">Planlanan işlem: <span id="plannedAction">0</span></div>
+      <div class="status-item">Hata: <span id="errorText" style="color: red; display: none;"></span></div>
+    </div>
     <input type="button" id="earlyStop" value="Erken Durdur" class="btn btn-dark" style="margin-top:15px;">
-    <br>
-
   </div>
+  <!-- End Unified Status Bar Section -->
+
+  <!-- Buttons Section -->
+  <div class="buttons-section">
+    <div class="button-group"> <!-- Grouping for compact alignment -->
+      <button id="openauthorListPage" class="btn btn-dark">Gireceğim Listedeki Yazarları Engelle/Engelini Kaldır</button>
+      <button id="startUndobanAll" class="btn btn-dark">Tüm Engellerimi Kaldır</button>
+    </div>
+    <div class="button-group"> <!-- Grouping for compact alignment -->
+      <button id="migrateBlockedToMuted" class="btn btn-dark">Engellenenleri Sessize Al (Deneysel)</button>
+      <button id="migrateBlockedTitlesToUnblocked" class="btn btn-dark">Engellenen Başlıkları Kaldır (Deneysel)</button>
+    </div>
+    <div class="button-group"> <!-- Grouping for compact alignment -->
+      <button id="refreshMutedList" class="btn btn-dark">Sessiz listesini yenile</button>
+      <button id="exportMutedListCSV" class="btn btn-dark" disabled>Listeyi Dışa Aktar (CSV)</button>
+    </div>
+    <!-- Muted User Section -->
+    <div id="mutedInfo" class="button-section"> <!-- Added button-section class -->
+      Sessize alınmış yazarlar: <span id="mutedUserCount">Yükleniyor...</span>
+    </div>
+    <div class="button-section button-group"> <!-- Added button-section and button-group classes -->
+      <button id="exportMutedListCSV" class="btn btn-dark" disabled>Listeyi Dışa Aktar (CSV)</button>
+    </div>
+    <!-- End Muted User Section -->
+    <div class="button-group"> <!-- Grouping for compact alignment -->
+      <button id="openFaq" class="btn btn-dark">Ayarlar ve Yardım</button>
+    </div>
+    <div id="buttonStatus" class="status-text" style="text-align: center; margin-top: 10px;"></div> <!-- Dedicated status for button actions -->
+  </div>
+  <!-- End Buttons Section -->
+
+  <!-- Tables Section -->
+  <div class="tables-section">
+    <div class="table-container">
+      <table id="plannedProcesses">
+        <caption>Sıradakiler</caption>
+        <thead>
+          <tr>
+            <td>Saat</td>
+            <td>Kaynak</td>
+            <td>Mod</td>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-container">
+      <table id="completedProcesses">
+        <caption>Tamamlananlar</caption>
+        <thead>
+          <tr>
+            <td>Saat</td>
+            <td>Kaynak</td>
+            <td>Mod</td>
+            <td>Başarılı</td>
+            <td>Gerçekleşen</td>
+            <td>Planlanan</td>
+            <td>Hata</td>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- End Tables Section -->
 
 </div>
 
-<div class="containerTables">
-
-  <div style="margin-top:30px; float:left;">
-  <table id="plannedProcesses">
-  <caption>Sıradakiler</caption>
-  <thead>
-    <tr>
-      <td>Saat</td>
-      <td>Kaynak</td>
-      <td>Mod</td>
-    </tr>
-  </thead>
-  <tbody>
-  </tbody>
-  </table>
-  </div>
-
-  <div style="margin-top:30px; margin-left:20px; float:left;">
-  <table id="completedProcesses">
-  <caption>Tamamlananlar</caption>
-  <thead>
-    <tr>
-      <td>Saat</td>
-      <td>Kaynak</td>
-      <td>Mod</td>
-      <td>Başarılı</td>
-      <td>Gerçekleşen</td>
-      <td>Planlanan</td>
-      <td>Hata</td>
-    </tr>
-  </thead>
-  <tbody>
-  </tbody>
-  </table>
-  </div>
-     
-</div>
-  
 </body>
 </html>

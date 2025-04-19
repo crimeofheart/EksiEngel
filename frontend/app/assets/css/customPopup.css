@@ -1,20 +1,73 @@
-.customPopup {  
-  border-radius: 5px;
-  color: white;  
-  font-size: 15px;
-  font-weight: bold;
-  position:fixed;
-  left:0;
-  right:0;
-  margin: auto;
-  top: 40%;
-  -webkit-transform: translateY(-50%);
-  -ms-transform: translateY(-50%);
-  transform: translateY(-50%);
-  width: 250px;
-  height: auto;
-  padding: 15px;  
-  background: #81C14B;
+/* Styles for the popup.html */
+
+body {
+  width: 380px; /* Adjust body width for better layout */
+  padding: 2px; /* Reduced padding */
+  font-family: sans-serif; /* Basic font */
+}
+
+#title {
   text-align: center;
-  box-sizing: content-box;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 22px; /* Slightly reduced font size */
+  margin-bottom: 3px; /* Reduced margin */
+}
+
+img {
+  display: block;
+  margin: 0 auto 5px auto; /* Reduced bottom margin */
+  height: 64px; /* Set a fixed height for the image */
+  width: 64px; /* Set a fixed width for the image */
+}
+
+.button-section {
+  margin-bottom: 5px; /* Reduced space between button groups */
+  text-align: center; /* Center buttons within the section */
+}
+
+.button-section button {
+  display: block; /* Make buttons block for full width in their section */
+  width: 98%; /* Increased width slightly */
+  margin: 2px auto; /* Reduced vertical margin */
+  padding: 8px !important; /* Adjust padding */
+  background-color: #5086bd;
+  border: 1px solid #000000; /* Adjusted border */
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.button-section button:hover {
+  background-color: #3a6a9a; /* Darker shade on hover */
+}
+
+.button-group {
+  display: flex; /* Use flexbox for side-by-side buttons */
+  justify-content: space-between; /* Space out buttons */
+  align-items: center;
+}
+
+.button-group button {
+  display: inline-block; /* Allow buttons to be side-by-side */
+  width: 48%; /* Allocate width for two buttons with a gap */
+  margin: 0; /* Remove margin set for block buttons */
+  padding: 8px !important; /* Ensure consistent padding */
+}
+
+#mutedInfo {
+    text-align: center;
+    margin-bottom: 3px; /* Reduced space below muted user count */
+    font-size: 0.9em; /* Slightly reduced font size */
+    color: #333;
+}
+
+#popupStatus {
+  text-align: center;
+  margin-top: 5px; /* Reduced space above status */
+  height: 1.2em; /* Reduced height for status message */
+  font-size: 0.9em; /* Reduced font size */
+  color: #333;
+  min-height: 1.2em; /* Ensure minimum height even when empty */
 }

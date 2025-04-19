@@ -48,6 +48,49 @@ class StorageHandler {
   }
 
   /**
+   * Saves the count of muted users to local storage.
+   * @param {number} count - The count of muted users to save.
+   * @returns {Promise<void>} A promise that resolves on success, or rejects on error.
+   */
+  async saveMutedUserCount(count) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ 'mutedUserCount': count }, () => {
+        if (chrome.runtime.lastError) {
+          log.err('storage', `Error saving muted user count: ${chrome.runtime.lastError.message}`);
+          reject(chrome.runtime.lastError);
+        } else {
+          log.info('storage', `Saved muted user count: ${count}.`);
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Retrieves the count of muted users from local storage.
+   * @returns {Promise<number>} A promise resolving with the count (0 if none stored or error).
+   */
+  async getMutedUserCount() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['mutedUserCount'], (result) => {
+        if (chrome.runtime.lastError) {
+          log.err('storage', `Error getting muted user count: ${chrome.runtime.lastError.message}`);
+          resolve(0); // Resolve with 0 on error
+        } else {
+          const count = result['mutedUserCount'];
+          if (typeof count === 'number') {
+            log.info('storage', `Retrieved muted user count: ${count} from storage.`);
+            resolve(count);
+          } else {
+            log.info('storage', 'No muted user count found in storage, or it is not a number.');
+            resolve(0); // Resolve with 0 if key doesn't exist or is not a number
+          }
+        }
+      });
+    });
+  }
+
+  /**
    * Retrieves the count of muted users from local storage.
    * @returns {Promise<number>} A promise resolving with the count (0 if none stored or error).
    */

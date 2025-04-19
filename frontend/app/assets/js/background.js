@@ -130,11 +130,13 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
       log.info("bg", "Handling refreshMutedList request from popup.");
 
       // Define a function to send progress updates to the notification page
-      const updateProgress = (progress) => {
+      const updateProgress = async (progress) => {
         chrome.tabs.sendMessage(g_notificationTabId, {
           action: "updateMutedListProgress",
           ...progress // currentPage, currentCount
         });
+        // Save the current count to storage
+        await storageHandler.saveMutedUserCount(progress.currentCount);
       };
 
       // Call scrapeAllMutedUsers with the progress callback
@@ -143,6 +145,8 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
 
         if (result.success) {
           await storageHandler.saveMutedUserList(result.usernames);
+          // Save the final count to storage
+          await storageHandler.saveMutedUserCount(result.count);
           log.info("bg", `Successfully scraped and saved ${result.count} muted users.`);
           // Send final success message to notification page
           chrome.tabs.sendMessage(g_notificationTabId, {

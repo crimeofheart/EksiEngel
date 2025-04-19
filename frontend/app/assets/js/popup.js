@@ -74,12 +74,12 @@ async function initializePopup() {
 
   // Set initial count from storage
   try {
-    const count = await storageHandler.getMutedUserCountFromStorage();
+    const count = await storageHandler.getMutedUserCount();
     mutedUserCountSpan.textContent = count;
     exportMutedListCSVButton.disabled = count === 0;
   } catch (error) {
     log.err("popup.js", "Error getting initial muted count:", error);
-    mutedUserCountSpan.textContent = 'Error';
+    mutedUserCountSpan.textContent = 'Error'; // Display 'Error' on failure
     exportMutedListCSVButton.disabled = true;
   }
 

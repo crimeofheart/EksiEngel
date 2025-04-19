@@ -1,0 +1,178 @@
+/* Styles for the notification page */
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #e9e9e9;
+}
+
+.status-section h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.bar-container {
+    width: 100%;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.bar {
+    height: 24px;
+    text-align: center;
+    line-height: 24px;
+    color: white;
+    border-radius: 4px;
+    transition: width 0.5s ease-in-out;
+}
+
+.green {
+    background-color: #4CAF50; /* Green */
+}
+
+.status-text {
+    font-size: 0.9em;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.status-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px dashed #ccc;
+}
+
+.status-item {
+    font-size: 1em;
+    color: #333;
+}
+
+.status-details .status-item:first-child {
+    grid-column: 1 / -1; /* Make the first status item span all columns */
+}
+
+.status-item span {
+    font-weight: bold;
+}
+
+.buttons-section {
+    margin-bottom: 30px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    display: flex; /* Use flexbox for compact alignment */
+    flex-wrap: wrap; /* Allow buttons to wrap */
+    gap: 10px; /* Space between buttons */
+    justify-content: center; /* Center buttons */
+    gap: 10px; /* Space between button groups */
+}
+
+.button-group {
+    display: flex; /* Use flexbox for side-by-side buttons within a group */
+    justify-content: space-between; /* Space out buttons within the group */
+    align-items: center;
+    width: 100%; /* Make button group take full width of buttons-section */
+    flex-wrap: wrap; /* Allow buttons within group to wrap */
+    gap: 10px; /* Space between buttons within a group */
+}
+
+.button-group button {
+    flex-grow: 1; /* Allow buttons within group to grow */
+    min-width: 200px; /* Minimum width for buttons within group */
+    text-align: center;
+    padding: 8px !important; /* Adjust padding */
+    background-color: #5086bd;
+    border: 1px solid #000000; /* Adjusted border */
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.button-group button:hover {
+  background-color: #3a6a9a; /* Darker shade on hover */
+}
+
+.tables-section {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap; /* Allow tables to wrap on smaller screens */
+}
+
+.table-container {
+    flex: 1; /* Allow tables to take equal space */
+    min-width: 300px; /* Minimum width for tables */
+}
+
+table {
+    width: 100%;
+    border: 1px solid #ccc;
+    font-family: 'Montserrat', sans-serif;
+    border-collapse: collapse;
+    margin-top: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+caption {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: left;
+    color: #333;
+}
+
+thead {
+    background-color: #1f1f1f;
+    color: white;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    .status-details {
+        grid-template-columns: 1fr; /* Stack status items on small screens */
+    }
+
+    .tables-section {
+        flex-direction: column; /* Stack tables on small screens */
+    }
+
+    .table-container {
+        min-width: 100%;
+    }
+}

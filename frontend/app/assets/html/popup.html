@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="../css/buttons.css">
+<link rel="stylesheet" href="../css/customPopup.css"> <!-- Link to customPopup.css -->
 
 <style>
 #title {
@@ -14,44 +15,43 @@ img {
   display: block;
   margin-left: auto;
   margin-right: auto;
-  margin-bottom: 2px;
+  margin-bottom: 10px; /* Increased margin */
 }
-button {
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 2px;
-  margin-bottom: 2px;
-  padding: 6px !important;
-  width: 350px;
-  background-color: #5086bd;
-  border: 2px solid #000000;
-}
+/* Default button styles are in buttons.css, customPopup.css will override for layout */
 </style>
 
 </head>
 <body>
 <p id="title">Ekşi Engel</p>
-<img src="../img/eksiengel128.png"> 
-<button id="openauthorListPage" class="btn btn-dark" rows=2>Gireceğim Listedeki Yazarları Engelle/Engelini Kaldır</button>
-<button id="startUndobanAll" class="btn btn-dark">Tüm Engellerimi Kaldır</button>
-<button id="migrateBlockedToMuted" class="btn btn-dark">Engellenenleri Sessize Al (Deneysel)</button>
-<button id="migrateBlockedTitlesToUnblocked" class="btn btn-dark">Engellenen Başlıkları Kaldır (Deneysel)</button>
-<button id="openFaq" class="btn btn-dark">Ayarlar ve Yardım</button>
+<img src="../img/eksiengel128.png">
 
+<div class="button-section">
+  <button id="openauthorListPage" class="btn btn-dark">Gireceğim Listedeki Yazarları Engelle/Engelini Kaldır</button>
+  <button id="startUndobanAll" class="btn btn-dark">Tüm Engellerimi Kaldır</button>
+</div>
+
+<div class="button-section">
+  <button id="migrateBlockedToMuted" class="btn btn-dark">Engellenenleri Sessize Al (Deneysel)</button>
+  <button id="migrateBlockedTitlesToUnblocked" class="btn btn-dark">Engellenen Başlıkları Kaldır (Deneysel)</button>
+</div>
 
 <!-- Muted User Section -->
-<div id="mutedInfo" style="text-align: center; margin-top: 15px; margin-bottom: 5px; clear: both;">
+<div id="mutedInfo" class="button-section"> <!-- Added button-section class -->
   Sessize alınmış yazarlar: <span id="mutedUserCount">Loading...</span>
 </div>
-<div style="width: 350px; margin: 0 auto; overflow: hidden; margin-bottom: 5px;"> <!-- Container for buttons -->
-  <button id="refreshMutedList" class="btn btn-dark" style="width: 48%; float: left; margin-top: 2px; margin-bottom: 2px;">Sessiz listesini yenile</button>
-  <button id="exportMutedListCSV" class="btn btn-dark" style="width: 48%; float: right; margin-top: 2px; margin-bottom: 2px;" disabled>Listeyi Dışa Aktar (CSV)</button>
+<div class="button-section button-group"> <!-- Added button-section and button-group classes -->
+  <button id="refreshMutedList" class="btn btn-dark">Sessiz listesini yenile</button>
+  <button id="exportMutedListCSV" class="btn btn-dark" disabled>Listeyi Dışa Aktar (CSV)</button>
 </div>
-<div id="popupStatus" style="text-align: center; margin-top: 5px; height: 1.2em; font-size: 0.9em; color: #333;"></div>
 <!-- End Muted User Section -->
 
+<div class="button-section">
+  <button id="openFaq" class="btn btn-dark">Ayarlar ve Yardım</button>
+</div>
+
+<div id="popupStatus"></div> <!-- Status div -->
 
 <script type="module" src="../js/popup.js"></script>
 
 </body>
-<html>
+</html>
