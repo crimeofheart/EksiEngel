@@ -308,10 +308,21 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     const totalMatch = message.match(/Total (\d+)/);
     if (totalMatch && totalMatch[1]) {
       const totalCount = totalMatch[1];
+      const mutedUserCountSpan = document.getElementById("mutedUserCount"); // Get reference here
       if (mutedUserCountSpan) {
-      const mutedUserCountSpan = document.getElementById("mutedUserCount");
         mutedUserCountSpan.textContent = totalCount;
       }
+    }
+    sendResponse({ status: "ok" });
+    return true;
+  }
+
+  // Handle real-time muted list refresh progress updates
+  if (message && message.action === "mutedListRefreshProgress") {
+    console.log(`Received muted list refresh progress: Count ${message.count}`);
+    const mutedUserCountSpan = document.getElementById("mutedUserCount"); // Get reference here
+    if (mutedUserCountSpan) {
+      mutedUserCountSpan.textContent = message.count;
     }
     sendResponse({ status: "ok" });
     return true;

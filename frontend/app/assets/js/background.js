@@ -131,9 +131,11 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
 
       // Define a function to send progress updates to the notification page
       const updateProgress = async (progress) => {
+        // Send progress update to the notification page
         chrome.tabs.sendMessage(g_notificationTabId, {
-          action: "updateMutedListProgress",
-          ...progress // currentPage, currentCount
+          action: "mutedListRefreshProgress", // New action for real-time updates
+          count: progress.currentCount // Include the current count
+          // currentPage is not needed for this specific update
         });
         // Save the current count to storage
         await storageHandler.saveMutedUserCount(progress.currentCount);
