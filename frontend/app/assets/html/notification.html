@@ -30,8 +30,9 @@
     <div id="bar" class="bar green" style="height:24px;width:0%"></div>
   </div>
   
-  <p id="barText">0%</p>
-  
+  <p id="barText" style="font-size: 0.9em;">0%</p> <!-- Existing bar text -->
+  <p id="progressText" style="font-size: 0.9em;"></p> <!-- Added general progress text -->
+
   <!-- Migration Progress Section -->
   <div id="migrationProgressSection" style="margin-top: 15px; border: 1px dashed #ccc; padding: 10px;">
     <h4>Engellenenleri Sessize Alma Durumu:</h4>
@@ -46,17 +47,28 @@
   <!-- End Migration Progress Section -->
 
 
+  <!-- Added General Progress Bar (distinct from migration bar) -->
+  <div id="generalProgressSection" style="margin-top: 15px;">
+      <h4>Genel İşlem Durumu:</h4>
+      <div class="bar-container">
+          <div id="progressBar" class="bar green" style="height:18px;width:0%"></div> <!-- Added general progress bar -->
+      </div>
+      <p id="progressBarText" style="font-size: 0.9em;">0%</p> <!-- Added general progress bar text -->
+  </div>
+  <!-- End General Progress Bar -->
+
   <div class="grid-container">
-    <div class="grid-item">Durum:</div>            <div class="grid-item"><a id="statusText">İşlem başlayacak.</a></div>
-    <div class="grid-item">Cooldown:</div>       <div class="grid-item"><a id="remainingTimeInSec">?</a></div>
-    <div class="grid-item">Başarılı işlem:</div>   <div class="grid-item"><a id="successfulAction">0</a></div>
-    <div class="grid-item">Gerçekleşen işlem:</div><div class="grid-item"><a id="performedAction">0</a></div>
-    <div class="grid-item">Planlanan işlem:</div>  <div class="grid-item"><a id="plannedAction">0</a></div>
+    <div class="grid-item">Durum:</div>            <div class="grid-item"><span id="statusText">İşlem başlayacak.</span></div> <!-- Changed to span for better text handling -->
+    <div class="grid-item">Cooldown:</div>       <div class="grid-item"><span id="remainingTimeInSec" style="display: none;"></span></div> <!-- Changed to span, initially hidden -->
+    <div class="grid-item">Başarılı işlem:</div>   <div class="grid-item"><span id="successfulAction">0</span></div> <!-- Changed to span -->
+    <div class="grid-item">Gerçekleşen işlem:</div><div class="grid-item"><span id="performedAction">0</span></div> <!-- Changed to span -->
+    <div class="grid-item">Planlanan işlem:</div>  <div class="grid-item"><span id="plannedAction">0</span></div> <!-- Changed to span -->
+    <div class="grid-item">Hata:</div>             <div class="grid-item"><span id="errorText" style="color: red; display: none;"></span></div> <!-- Added error text span, initially hidden -->
     <input type="button" id="earlyStop" value="Erken Durdur" class="btn btn-dark" style="margin-top:15px;">
     <br>
-    
+
   </div>
-    
+
 </div>
 
 <div class="containerTables">

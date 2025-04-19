@@ -27,6 +27,12 @@ class Log
       this.logData(`${this.getDateString()} ERR [${source}] ${data}`, Log.Levels.ERR);
   }
 	
+	debug = (source, data) =>
+  {
+		if(this.isEnabled)
+      this.logData(`${this.getDateString()} DBG [${source}] ${data}`, Log.Levels.INFO);
+  }
+
 	logData = (logMsg, level) =>
 	{
 		if(this.logConsole)

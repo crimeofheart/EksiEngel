@@ -12,48 +12,75 @@ class RelationHandler
   
   async performAction(banMode, id, isTargetUser, isTargetTitle, isTargetMute)
   {
-    if(id == 0)
+    // Returns: { resultType: enums.ResultType, successfulAction: number, performedAction: number, retryAfter?: number }
+    if(id == 0 || id === "0" || !id) // Added more robust check for invalid ID
     {
-      // action failed
+      log.warn("relation", `performAction called with invalid id: ${id}`);
+      // action failed, but count it as performed to avoid infinite loops if an ID is consistently invalid
       this.performedAction++;
+      // Return SUCCESS to prevent retry logic from triggering on invalid ID, but don't increment successfulAction
       return {resultType: enums.ResultType.SUCCESS, successfulAction: this.successfulAction, performedAction: this.performedAction};
     }
 
-    let resUser, resTitle, resMute;
+    let resUser = { status: enums.ResultTypeHttpReq.SUCCESS },
+        resTitle = { status: enums.ResultTypeHttpReq.SUCCESS },
+        resMute = { status: enums.ResultTypeHttpReq.SUCCESS };
+    let retryAfter = 0; // Store the max retryAfter value
+
     if(isTargetUser)
     {
       // enums.TargetType.USER
       let urlUser = this.#prepareHTTPRequest(banMode, enums.TargetType.USER, id);
       resUser = await this.#performHTTPRequest(banMode, enums.TargetType.USER, id, urlUser);
+      if (resUser.status === enums.ResultTypeHttpReq.TOO_MANY_REQ && resUser.retryAfter) {
+        retryAfter = Math.max(retryAfter, resUser.retryAfter);
+      }
     }
     if(isTargetTitle)
     {
       // enums.TargetType.TITLE
       let urlTitle = this.#prepareHTTPRequest(banMode, enums.TargetType.TITLE, id);
       resTitle = await this.#performHTTPRequest(banMode, enums.TargetType.TITLE, id, urlTitle);
+      if (resTitle.status === enums.ResultTypeHttpReq.TOO_MANY_REQ && resTitle.retryAfter) {
+        retryAfter = Math.max(retryAfter, resTitle.retryAfter);
+      }
     }
     if(isTargetMute)
     {
       // enums.TargetType.MUTE
       let urlMute = this.#prepareHTTPRequest(banMode, enums.TargetType.MUTE, id);
       resMute = await this.#performHTTPRequest(banMode, enums.TargetType.MUTE, id, urlMute);
+      if (resMute.status === enums.ResultTypeHttpReq.TOO_MANY_REQ && resMute.retryAfter) {
+        retryAfter = Math.max(retryAfter, resMute.retryAfter);
+      }
     }
-    
-    if((isTargetUser  && resUser == enums.ResultTypeHttpReq.TOO_MANY_REQ)  || 
-       (isTargetTitle && resTitle == enums.ResultTypeHttpReq.TOO_MANY_REQ) ||
-       (isTargetMute  && resMute == enums.ResultTypeHttpReq.TOO_MANY_REQ)  )
+
+    // Check if any request hit the rate limit
+    if((isTargetUser  && resUser.status == enums.ResultTypeHttpReq.TOO_MANY_REQ)  ||
+       (isTargetTitle && resTitle.status == enums.ResultTypeHttpReq.TOO_MANY_REQ) ||
+       (isTargetMute  && resMute.status == enums.ResultTypeHttpReq.TOO_MANY_REQ)  )
     {
-      // too many request has been made, don't count this action and return false
-      return {resultType: enums.ResultType.FAIL, successfulAction: this.successfulAction, performedAction: this.performedAction};
+      // Rate limit hit, return FAIL and the calculated retryAfter duration
+      log.warn("relation", `Rate limit hit for id ${id}. Suggested retryAfter: ${retryAfter} seconds.`);
+      // Don't increment performedAction here, let the retry logic handle it
+      return {resultType: enums.ResultType.FAIL, successfulAction: this.successfulAction, performedAction: this.performedAction, retryAfter: retryAfter};
     }
     else
     {
+      // No rate limit hit, proceed as normal
       this.performedAction++;
-      if((!isTargetUser  || resUser == enums.ResultTypeHttpReq.SUCCESS)  && 
-         (!isTargetTitle || resTitle == enums.ResultTypeHttpReq.SUCCESS) &&
-         (!isTargetMute  || resMute == enums.ResultTypeHttpReq.SUCCESS)  )
+      // Check if all *attempted* actions were successful
+      let allSucceeded = true;
+      if (isTargetUser && resUser.status !== enums.ResultTypeHttpReq.SUCCESS) allSucceeded = false;
+      if (isTargetTitle && resTitle.status !== enums.ResultTypeHttpReq.SUCCESS) allSucceeded = false;
+      if (isTargetMute && resMute.status !== enums.ResultTypeHttpReq.SUCCESS) allSucceeded = false;
+
+      if (allSucceeded) {
         this.successfulAction++;
-     
+      } else {
+         log.warn("relation", `One or more actions failed for id ${id} (not rate limit). User: ${resUser.status}, Title: ${resTitle.status}, Mute: ${resMute.status}`);
+      }
+
       return {resultType: enums.ResultType.SUCCESS, successfulAction: this.successfulAction, performedAction: this.performedAction};
     }
   }
@@ -87,10 +114,14 @@ class RelationHandler
   
   #performHTTPRequest = async (banMode, targetType, id, url) =>
 	{
-    if(id <= 0)
-      return enums.ResultTypeHttpReq.FAIL;
-		let res = enums.ResultTypeHttpReq.FAIL;
-    try 
+    // Returns: { status: enums.ResultTypeHttpReq, retryAfter?: number }
+    if(id <= 0 || id === "0" || !id) { // Added more robust check
+      log.warn("relation", `#performHTTPRequest called with invalid id: ${id}`);
+      return { status: enums.ResultTypeHttpReq.FAIL };
+    }
+
+    let result = { status: enums.ResultTypeHttpReq.FAIL };
+    try
     {
       let response = await fetch(url, {
         method: 'POST',
@@ -105,9 +136,22 @@ class RelationHandler
         log.err("relation", "http response: " + response.status);
         if(response.status == 429)
         {
-          //const responseText = await response.text();
-          //log.err("relation", "url: " + url + " response: " + responseText);
-          return enums.ResultTypeHttpReq.TOO_MANY_REQ;
+          const retryAfterHeader = response.headers.get('Retry-After');
+          let retrySeconds = 65; // Default retry time if header is missing or invalid
+          if (retryAfterHeader) {
+            const parsedSeconds = parseInt(retryAfterHeader, 10);
+            // Check if it's a valid number (HTTP date format is not handled here, assuming seconds)
+            if (!isNaN(parsedSeconds) && parsedSeconds > 0) {
+              retrySeconds = parsedSeconds + 1; // Add a small buffer
+              log.info("relation", `Received Retry-After header: ${retryAfterHeader}. Using delay: ${retrySeconds}s`);
+            } else {
+               log.warn("relation", `Invalid Retry-After header received: ${retryAfterHeader}. Using default delay: ${retrySeconds}s`);
+            }
+          } else {
+             log.warn("relation", `429 response received without Retry-After header. Using default delay: ${retrySeconds}s`);
+          }
+          result = { status: enums.ResultTypeHttpReq.TOO_MANY_REQ, retryAfter: retrySeconds };
+          return result; // Return immediately on rate limit
         }
         else
         {
@@ -125,20 +169,22 @@ class RelationHandler
       
       // for enums.BanMode.BAN result is number. Probably 0 is success, 2 is already banned
       if(banMode === enums.BanMode.BAN && typeof responseJson === "number" && (responseJson === 0 || responseJson === 2))
-        res = enums.ResultTypeHttpReq.SUCCESS; 
+        result.status = enums.ResultTypeHttpReq.SUCCESS;
       // for enums.BanMode.UNDOBAN result is object and it has 'result' key.
       else if(banMode === enums.BanMode.UNDOBAN && typeof responseJson === "object" && responseJson.result === true)
-        res = enums.ResultTypeHttpReq.SUCCESS; 
-      else
-        res = enums.ResultTypeHttpReq.FAIL;
+        result.status = enums.ResultTypeHttpReq.SUCCESS;
+      else {
+        result.status = enums.ResultTypeHttpReq.FAIL;
+        log.warn("relation", `Unexpected response format for id ${id}, banMode ${banMode}. Response: ${responseText}`);
+      }
       // log.info("relation", "banMode: " + banMode + ", targetType: " + targetType + ", id: " + id + ", response text: " + responseText);
     }
     catch(err)
     {
-      log.err("relation", err);
-      res = enums.ResultTypeHttpReq.FAIL; 
+      log.err("relation", `#performHTTPRequest error for id ${id}: ${err}`);
+      result.status = enums.ResultTypeHttpReq.FAIL;
     }
-    return res;
+    return result;
 	}
 }
 

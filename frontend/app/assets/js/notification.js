@@ -114,12 +114,118 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     }
 
     sendResponse({ status: "ok" });
-    return true;
+    return true; // Keep channel open for async response
   }
-  
+
+  // --- Handle General Notifications from Background ---
+  if (message && message.notification) {
+    const notification = message.notification;
+    // Only log if it's not a cooldown update to prevent spam
+    if (notification.status !== enums.NotificationType.COOLDOWN) {
+        console.log("Received general notification:", notification);
+    }
+
+    const statusTextDiv = document.getElementById("statusText");
+    const errorTextDiv = document.getElementById("errorText"); // Assuming an element with this ID exists or needs to be added
+    const progressBar = document.getElementById("progressBar"); // Assuming progress bar elements exist
+    const progressBarText = document.getElementById("progressBarText");
+    const progressText = document.getElementById("progressText");
+    const remainingTimeDiv = document.getElementById("remainingTimeInSec"); // Specific element for cooldown timer
+
+    // Clear previous error messages unless it's a FINISH status with an error
+    if (errorTextDiv && notification.status !== enums.NotificationType.FINISH) {
+      errorTextDiv.innerHTML = "";
+      errorTextDiv.style.display = "none";
+    }
+
+    // --- Handle Cooldown ---
+    if (notification.status === enums.NotificationType.COOLDOWN) {
+      // Check if the cooldown message is the same as the last one
+      if (typeof this.lastCooldownMessage === 'undefined' || this.lastCooldownMessage !== notification.statusText + notification.remainingTimeInSec) {
+        this.lastCooldownMessage = notification.statusText + notification.remainingTimeInSec;
+        if (statusTextDiv) {
+          // Display the main cooldown message, including the link
+          statusTextDiv.innerHTML = notification.statusText; // This contains the main text + link
+        }
+        if (remainingTimeDiv) {
+          // Update the dedicated timer display
+          remainingTimeDiv.innerHTML = `Kalan süre: ${notification.remainingTimeInSec} saniye`;
+          remainingTimeDiv.style.display = "inline"; // Make sure it's visible
+        }
+      }
+      // Hide progress bar during cooldown
+      if (progressBar) progressBar.style.width = "0%";
+      if (progressBarText) progressBarText.innerHTML = "";
+      if (progressText) progressText.innerHTML = "";
+
+    } else {
+      // --- Handle Non-Cooldown Statuses ---
+
+      // Hide the dedicated cooldown timer if it's not a cooldown status
+      if (remainingTimeDiv) {
+        remainingTimeDiv.style.display = "none";
+      }
+
+      // Update status text
+      if (statusTextDiv) {
+        statusTextDiv.innerHTML = notification.statusText || "Durum güncellendi."; // Default text if empty
+      }
+
+      // Update progress bar for ONGOING status
+      if (notification.status === enums.NotificationType.ONGOING && notification.plannedAction > 0) {
+        const percentage = Math.round((notification.performedAction / notification.plannedAction) * 100);
+        if (progressBar) progressBar.style.width = percentage + "%";
+        if (progressBarText) progressBarText.innerHTML = "%" + percentage;
+        if (progressText) progressText.innerHTML = "İşlenen: " + notification.performedAction + "/" + notification.plannedAction + " Başarılı: " + notification.successfulAction;
+      } else if (notification.status === enums.NotificationType.FINISH) {
+         // Set progress bar to 100% on successful finish
+        if (progressBar) progressBar.style.width = "100%";
+        if (progressBarText) progressBarText.innerHTML = "%100";
+        if (progressText) progressText.innerHTML = "Tamamlandı. Başarılı: " + notification.successfulAction + "/" + notification.performedAction;
+      } else {
+        // Hide progress for other statuses like NOTIFY
+        if (progressBar) progressBar.style.width = "0%";
+        if (progressBarText) progressBarText.innerHTML = "";
+        if (progressText) progressText.innerHTML = "";
+      }
+
+      // Handle FINISH status (update completed table, show errors)
+      if (notification.status === enums.NotificationType.FINISH && notification.completedProcess) {
+        insertCompletedProcessesTable(
+          notification.completedProcess.banSource,
+          notification.completedProcess.banMode,
+          notification.successfulAction,
+          notification.performedAction,
+          notification.plannedAction,
+          notification.errorText || "Başarılı" // Use errorText if provided
+        );
+        if (notification.errorText && notification.errorText !== "yok" && errorTextDiv) {
+           errorTextDiv.innerHTML = `Hata: ${notification.errorText}`;
+           errorTextDiv.style.display = "block"; // Show error
+        }
+         // Re-enable early stop button on finish
+        const earlyStopButton = document.getElementById("earlyStop");
+        if (earlyStopButton) {
+            earlyStopButton.textContent = "ERKEN DURDUR";
+            earlyStopButton.disabled = false;
+        }
+      }
+
+      // Update planned processes table if data is provided
+      if (notification.plannedProcesses && notification.plannedProcesses.length >= 0) { // Allow empty array to clear table
+        updatePlannedProcessesTable(notification.plannedProcesses);
+      }
+    }
+
+    sendResponse({status: 'ok'});
+    return true; // Keep channel open
+  }
+
+
   // Handle migration progress updates
   if (message && message.action === "updateMigrationProgress") {
-    console.log(`Updating migration progress: ${message.current}/${message.total} (${message.percentage}%)`);
+    // Reduced logging frequency for migration progress
+    console.debug(`Updating migration progress: ${message.current}/${message.total} (${message.percentage}%)`);
     
     // Update the migration progress bar
     const migrationBar = document.getElementById("migrationBar");

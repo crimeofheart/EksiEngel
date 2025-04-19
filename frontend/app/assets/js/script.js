@@ -43,15 +43,21 @@
         titleId: titleId,
         timeSpecifier: timeSpecifier
       }, 
-      function(response) 
+      function(response)
       {
-        let lastError = chrome.runtime.lastError;
-        if(lastError)
-        {
-          //console.log("Eksi Engel: could not establish a connection with a page");
+        if (chrome.runtime.lastError) {
+          // Check if the error is due to context invalidation
+          if (chrome.runtime.lastError.message?.includes("Extension context invalidated")) {
+            console.warn("Eksi Engel: Connection to background script lost (Extension updated/reloaded?). Please reload the page.");
+            // Optionally, display a user-friendly message on the page itself
+          } else {
+            // Log other potential errors
+            console.error("Eksi Engel: Error sending message:", chrome.runtime.lastError.message);
+          }
         }
-        else
+        else if (response && response.status === 'ok')
         {
+          //console.log("Eksi Engel: established a connection with a page");
           //console.log("Eksi Engel: established a connection with a page");
           
           // notify the user about their action with using eksisozluk notification API, known classes: class="success" and class="error"

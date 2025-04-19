@@ -72,49 +72,52 @@ class ProgramController
 
       // Use enum keys for logging if available, otherwise use the value
       const banModeStr = Object.keys(enums.BanMode).find(key => enums.BanMode[key] === banMode) || banMode;
-      log.info("progctrl", `Attempt ${attempt + 1} for action: ${banModeStr}, id: ${id}, user: ${isTargetUser}, title: ${isTargetTitle}, mute: ${isTargetMute}`);
+      // Reduced logging frequency for action attempts
+      if (attempt === 0) {
+        log.debug("progctrl", `Attempt ${attempt + 1} for action: ${banModeStr}, id: ${id}, user: ${isTargetUser}, title: ${isTargetTitle}, mute: ${isTargetMute}`);
+      }
       
       // relationHandler manages its own counters, reset is important if reusing the instance for multiple steps
-      relationHandler.reset(); 
+      relationHandler.reset();
       const result = await relationHandler.performAction(banMode, id, isTargetUser, isTargetTitle, isTargetMute);
 
       if (result.resultType === enums.ResultType.SUCCESS) {
-        log.info("progctrl", `Action successful for id: ${id}`);
+        log.debug("progctrl", `Action successful for id: ${id}`);
         return { resultType: enums.ResultType.SUCCESS };
-      } else if (result.resultType === enums.ResultType.FAIL) {
-        // relationHandler returns FAIL for 429 Too Many Requests
-        log.warn("progctrl", `Action failed for id: ${id} (Possibly rate limited). Retrying after 65 seconds...`);
-        
+      } else if (result.resultType === enums.ResultType.FAIL && result.retryAfter) {
+        // Rate limit hit, use the suggested retryAfter value
+        let waitTimeInSec = result.retryAfter > 0 ? result.retryAfter : 65; // Use returned value or default
+        log.warn("progctrl", `Action failed for id: ${id} (Rate limited). Retrying after ${waitTimeInSec} seconds...`);
+
         // Notify user about cooldown via notification page
-        let waitTimeInSec = 65; // Match the sleep duration
         for(let i = 1; i <= waitTimeInSec; i++) {
             if(this.earlyStop) break; // Check early stop during wait
-            notificationHandler.notifyCooldown(waitTimeInSec - i);
+            notificationHandler.notifyCooldown(waitTimeInSec - i); // Show countdown
             await utils.sleep(1000); // Wait 1 second
         }
 
         if(this.earlyStop) { // Re-check after loop in case it was triggered during the last second
-             log.info("progctrl", "Migration stopped early during cooldown wait.");
-             
-             // Send a final status update to the notification page
+             log.info("progctrl", "Operation stopped early during cooldown wait.");
+
+             // Send a final status update (generic stop message)
              try {
                chrome.tabs.sendMessage(this.tabId, {
-                 action: "migrationStopped",
-                 message: "Migration stopped by user during cooldown.",
+                 action: "operationStopped", // Use a generic action name
+                 message: "Operation stopped by user during cooldown.",
                  cooldown: true
                });
              } catch (e) {
                log.warn("progctrl", `Error sending stop message: ${e}`);
              }
-             
+
              return { resultType: enums.ResultType.FAIL, earlyStop: true };
         }
-        
+
         attempt++;
       } else {
-        // Should not happen based on relationHandler logic
-        log.err("progctrl", `Unexpected result type from relationHandler: ${result.resultType} for id: ${id}`);
-        return { resultType: enums.ResultType.FAIL }; // Treat as failure
+         // Handle other failures (not rate limit) - no retry needed for these based on current relationHandler logic
+        log.err("progctrl", `Action failed for id: ${id} with result type: ${result.resultType}. Not retrying.`);
+        return { resultType: enums.ResultType.FAIL }; // Treat as final failure
       }
     }
     log.err("progctrl", `Action failed for id: ${id} after ${retries} attempts.`);
@@ -248,7 +251,7 @@ class ProgramController
         
         // For this specific feature, we always want to mute regardless of config setting
         // The whole point of this feature is to migrate from blocked to muted
-        log.info("progctrl", `Proceeding with muting regardless of config.enableMute setting`);
+        log.debug("progctrl", `Proceeding with muting regardless of config.enableMute setting`);
         
         log.info("progctrl", `Muting user: ${user.authorName}`);
         const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, user.authorId, false, false, true);
