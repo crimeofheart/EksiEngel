@@ -72,15 +72,28 @@ async function initializePopup() {
   exportMutedListCSVButton = document.getElementById('exportMutedListCSV');
   popupStatusDiv = document.getElementById('popupStatus');
 
+  // Set initial count to 0
+  if (mutedUserCountSpan) {
+    mutedUserCountSpan.textContent = '0';
+  }
+
   // Set initial count from storage
   try {
     const count = await storageHandler.getMutedUserCount();
-    mutedUserCountSpan.textContent = count;
-    exportMutedListCSVButton.disabled = count === 0;
+    if (mutedUserCountSpan) {
+      mutedUserCountSpan.textContent = count;
+    }
+    if (exportMutedListCSVButton) {
+      exportMutedListCSVButton.disabled = count === 0;
+    }
   } catch (error) {
     log.err("popup.js", "Error getting initial muted count:", error);
-    mutedUserCountSpan.textContent = 'Error'; // Display 'Error' on failure
-    exportMutedListCSVButton.disabled = true;
+    if (mutedUserCountSpan) {
+      mutedUserCountSpan.textContent = 'Error'; // Display 'Error' on failure
+    }
+    if (exportMutedListCSVButton) {
+      exportMutedListCSVButton.disabled = true;
+    }
   }
 
   // Add event listeners

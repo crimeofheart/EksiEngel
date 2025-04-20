@@ -388,7 +388,6 @@ class ProgramController
         // Simulate some work and potential failure for demonstration
         await utils.sleep(1000); // Simulate scraping/processing time
         const success = Math.random() > 0.1; // Simulate 90% success rate
-
         if (success) {
            log.info("progctrl", `Simulated successful blocking for user: ${user.authorName}`);
            blockedCount++;
@@ -498,6 +497,7 @@ class ProgramController
       // I will add a decision log entry about this.
       // *** END LIMITATION NOTE ***
 
+      // Simulate processing each user for title blocking
       for (let i = 0; i < usersToProcess.length; i++) {
         if (this.earlyStop) {
           log.info("progctrl", "Blocking titles stopped early by user.");
@@ -506,34 +506,31 @@ class ProgramController
         }
 
         const user = usersToProcess[i];
-        usersProcessedCount++;
-        notificationHandler.notifyProgress(`Processing titles for user ${usersProcessedCount}/${usersToProcess.length}: ${user.authorName}`, usersProcessedCount, usersToProcess.length);
+        notificationHandler.notifyProgress(`Processing titles for user ${i + 1}/${usersToProcess.length}: ${user.authorName}`, i + 1, usersToProcess.length);
 
-        log.info("progctrl", `Attempting to block titles for user: ${user.authorName} (ID: ${user.authorId || 'N/A'})...`);
+        log.info("progctrl", `Processing titles for user: ${user.authorName} (ID: ${user.authorId || 'N/A'})...`);
 
-        // *** PLACEHOLDER FOR ACTUAL TITLE BLOCKING LOGIC ***
-        // This is where the scraping and blocking of titles for the user would happen.
-        // This requires fetching the user's entries and then blocking each title.
-        // This logic is not implemented in this task.
+        // Placeholder for actual title scraping and blocking logic
         log.warn("progctrl", `Title blocking logic for user ${user.authorName} is a placeholder and not yet implemented.`);
+
         // Simulate some work and potential failure for demonstration
-        await utils.sleep(1000); // Simulate scraping/processing time
-        const success = Math.random() > 0.2; // Simulate 80% success rate
+        await utils.sleep(500); // Simulate scraping/processing time
+        const success = Math.random() > 0.2; // Simulate 80% success rate for processing user's titles
 
         if (success) {
            log.info("progctrl", `Simulated successful title processing for user: ${user.authorName}`);
-           // Simulate blocking a random number of titles
-           const simulatedBlockedTitles = Math.floor(Math.random() * 5);
-           titlesBlockedCount += simulatedBlockedTitles;
-           log.info("progctrl", `Simulated blocking ${simulatedBlockedTitles} titles for user: ${user.authorName}. Total titles blocked so far: ${titlesBlockedCount}`);
+           // Simulate blocking a random number of titles (between 0 and 5)
+           const blockedThisUser = Math.floor(Math.random() * 6);
+           titlesBlockedCount += blockedThisUser;
+           log.info("progctrl", `Simulated blocking ${blockedThisUser} titles for user ${user.authorName}. Total titles blocked: ${titlesBlockedCount}`);
         } else {
            log.err("progctrl", `Simulated failed title processing for user: ${user.authorName}`);
            failedUsersCount++;
         }
-        // *** END PLACEHOLDER ***
+        usersProcessedCount++;
       }
 
-      const finalMessage = `Blocking titles of blocked/muted users completed. Users processed: ${usersProcessedCount}, Failed users: ${failedUsersCount}, Simulated titles blocked: ${titlesBlockedCount}`;
+      const finalMessage = `Blocking titles completed. Successfully processed users: ${usersProcessedCount - failedUsersCount}, Failed users: ${failedUsersCount}, Total users processed: ${usersProcessedCount}. Simulated titles blocked: ${titlesBlockedCount}`;
       log.info("progctrl", finalMessage);
       notificationHandler.notify(finalMessage);
 
@@ -544,6 +541,9 @@ class ProgramController
       log.info("progctrl", "blockTitlesOfBlockedMuted function completed.");
       this.earlyStop = false;
       this._blockTitlesInProgress = false;
+      // No specific display update needed for this operation currently
     }
   }
 }
+
+export const programController = new ProgramController();
