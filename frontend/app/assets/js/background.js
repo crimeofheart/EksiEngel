@@ -19,7 +19,14 @@ let g_notificationTabId = 0;
 chrome.runtime.onMessage.addListener(async function messageListener_Popup(message, sender, sendResponse) {
   log.info("bg", "Received message:", message);
 
-  const actionsRequiringNotification = ["startMigration", "startTitleMigration", "refreshMutedList"];
+  // Add new actions that require the notification tab
+  const actionsRequiringNotification = [
+    "startMigration",
+    "startTitleMigration",
+    "refreshMutedList",
+    "blockMutedUsers", // Added
+    "blockTitlesOfBlockedMuted" // Added
+  ];
 
   // Check if the message requires the notification tab
   if (message && actionsRequiringNotification.includes(message.action)) {
@@ -212,7 +219,21 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
         sendResponse({ status: 'ok', message: 'Refresh initiated' });
       }
       return; // Stop further processing of this message
+    } else if (message.action === "blockMutedUsers") {
+      log.info("bg", "Handling blockMutedUsers request.");
+      // Call programController function (implementation needed there)
+      programController.blockMutedUsers();
+      sendResponse({ status: 'ok', message: 'Block Muted Users process initiated' });
+      return;
+    } else if (message.action === "blockTitlesOfBlockedMuted") {
+      log.info("bg", "Handling blockTitlesOfBlockedMuted request.");
+      // Call programController function (implementation needed there)
+      programController.blockTitlesOfBlockedMuted();
+      sendResponse({ status: 'ok', message: 'Block Titles of Blocked/Muted process initiated' });
+      return;
+    
     }
+    // New handlers will be inserted here in the next step
   }
 
   // Handle early stop message

@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', async function () {
   document.getElementById('migrateBlockedTitlesToUnblocked')?.addEventListener('click', handleMigrateBlockedTitlesToUnblocked);
   document.getElementById('refreshMutedList')?.addEventListener('click', handleRefreshMutedList);
   document.getElementById('exportMutedListCSV')?.addEventListener('click', handleExportMutedList);
+  document.getElementById('btnBlockMutedUsers')?.addEventListener('click', handleBlockMutedUsers);
+  document.getElementById('btnBlockTitlesOfBlockedMuted')?.addEventListener('click', handleBlockTitlesOfBlockedMuted);
 
 
   // Send a message to the background script that the notification page is ready
@@ -226,6 +228,35 @@ async function handleExportMutedList() {
     const exportButton = document.getElementById('exportMutedListCSV');
     if (exportButton) exportButton.disabled = false; // Re-enable regardless of success/failure
   }
+}
+
+
+function handleBlockMutedUsers() {
+  // TODO: Add Analytics Data Point
+  updateButtonStatus("Starting 'Block Muted Users' process...", false, 0);
+  chrome.runtime.sendMessage({ action: "blockMutedUsers" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error("notification.js: Error sending blockMutedUsers message:", chrome.runtime.lastError.message);
+      updateButtonStatus("Error starting process: " + chrome.runtime.lastError.message, true, 5000);
+    } else {
+      console.log("notification.js: blockMutedUsers message sent.");
+      // Status updates will come via chrome.runtime.onMessage listener
+    }
+  });
+}
+
+function handleBlockTitlesOfBlockedMuted() {
+  // TODO: Add Analytics Data Point
+  updateButtonStatus("Starting 'Block Titles of Blocked/Muted' process...", false, 0);
+  chrome.runtime.sendMessage({ action: "blockTitlesOfBlockedMuted" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error("notification.js: Error sending blockTitlesOfBlockedMuted message:", chrome.runtime.lastError.message);
+      updateButtonStatus("Error starting process: " + chrome.runtime.lastError.message, true, 5000);
+    } else {
+      console.log("notification.js: blockTitlesOfBlockedMuted message sent.");
+      // Status updates will come via chrome.runtime.onMessage listener
+    }
+  });
 }
 
 

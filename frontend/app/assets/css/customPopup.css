@@ -26,8 +26,8 @@ img {
 
 .button-section button.btn-green-candy {
   display: block; /* Make buttons block for full width in their section */
-  width: 98%; /* Increased width slightly */
-  margin: 2px auto; /* Reduced vertical margin */
+  width: 100%; /* Ensure full width */
+  margin: 2px 0; /* Keep vertical margin, remove auto for horizontal */
   padding: 8px !important; /* Adjust padding */
   cursor: pointer;
   font-size: 14px;
@@ -48,15 +48,31 @@ img {
 
 .button-group {
   display: flex; /* Use flexbox for side-by-side buttons */
-  justify-content: space-between; /* Space out buttons */
+  /* Removed justify-content: space-between to allow equal width distribution */
   align-items: center;
-} /* Close .button-group */
+  gap: 5px; /* Add a small gap between buttons */
+}
 
 /* Ensure green styling for target buttons with maximum specificity in popup.html */
 .button-section button.btn.btn-dark.btn-green-candy {
     background-color: #4CAF50; /* Green */
     color: #000000; /* Black */
     border: 1px solid #388E3C; /* Dark Green */
+}
+
+/* Custom styles for specific buttons in popup.html to make them slightly smaller */
+#btnBlockMutedUsers,
+#btnBlockTitlesOfBlockedMuted {
+  padding: 6px 12px !important; /* Reduced padding */
+  font-size: 14px; /* Adjusted for consistent font size */
+}
+
+#btnUnblockAndMute,
+#btnBlockMutedUsers {
+  padding: 8px !important; /* Ensure consistent padding for equal size */
+  flex-grow: 1; /* Make buttons grow to fill available space equally */
+  /* Removed width: 48% as flex-grow handles width */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
 .button-section button.btn.btn-dark.btn-green-candy:hover,
@@ -67,8 +83,8 @@ img {
 }
 
 .button-group button {
-  display: inline-block; /* Allow buttons to be side-by-side */
-  width: 48%; /* Allocate width for two buttons with a gap */
+  /* display: inline-block; Removed as flex items are block-like */
+  /* width: 48%; Removed as flex-grow handles width */
   margin: 0; /* Remove margin set for block buttons */
   padding: 8px !important; /* Ensure consistent padding */
 }

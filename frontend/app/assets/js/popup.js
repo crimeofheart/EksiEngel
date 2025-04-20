@@ -93,6 +93,8 @@ async function initializePopup() {
   document.getElementById('openFaq')?.addEventListener('click', handleOpenFaq);
   document.getElementById('migrateBlockedToMuted')?.addEventListener('click', handleMigrateBlockedToMuted);
   document.getElementById('migrateBlockedTitlesToUnblocked')?.addEventListener('click', handleMigrateBlockedTitlesToUnblocked);
+  document.getElementById('btnBlockMutedUsers')?.addEventListener('click', handleBlockMutedUsers);
+  document.getElementById('btnBlockTitlesOfBlockedMuted')?.addEventListener('click', handleBlockTitlesOfBlockedMuted);
 
   log.info("popup.js: Initialization complete.");
 }
@@ -219,6 +221,35 @@ function handleMigrateBlockedTitlesToUnblocked() {
     }
   });
 }
+
+function handleBlockMutedUsers() {
+  // TODO: Add Analytics Data Point
+  updateStatus("Starting 'Block Muted Users' process...", false, 0);
+  chrome.runtime.sendMessage({ action: "blockMutedUsers" }, (response) => {
+    if (chrome.runtime.lastError) {
+      log.error("popup.js: Error sending blockMutedUsers message:", chrome.runtime.lastError.message);
+      updateStatus("Error starting process: " + chrome.runtime.lastError.message, true, 5000);
+    } else {
+      log.info("popup.js: blockMutedUsers message sent.");
+      window.close(); // Close popup after initiating
+    }
+  });
+}
+
+function handleBlockTitlesOfBlockedMuted() {
+  // TODO: Add Analytics Data Point
+  updateStatus("Starting 'Block Titles of Blocked/Muted' process...", false, 0);
+  chrome.runtime.sendMessage({ action: "blockTitlesOfBlockedMuted" }, (response) => {
+    if (chrome.runtime.lastError) {
+      log.error("popup.js: Error sending blockTitlesOfBlockedMuted message:", chrome.runtime.lastError.message);
+      updateStatus("Error starting process: " + chrome.runtime.lastError.message, true, 5000);
+    } else {
+      log.info("popup.js: blockTitlesOfBlockedMuted message sent.");
+      window.close(); // Close popup after initiating
+    }
+  });
+}
+
 
 // --- Initial Setup ---
 
