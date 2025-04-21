@@ -1093,6 +1093,24 @@ class ScrapingHandler
       return null;
     }
   }
+
+  /**
+   * Scrapes a single page of muted users from Ekşi Sözlük.
+   * @param {number} pageIndex - The index of the page to scrape (1-based).
+   * @returns {Promise<{authorIdList: string[], authorNameList: string[], isLast: bool}>}
+   * @throws {Error} If the scraping fails.
+   */
+  async scrapeMutedUsersPage(pageIndex) {
+    log.info("scraping", `Scraping muted users page ${pageIndex}...`);
+    try {
+      // Call the private method with the MUTE target type
+      const partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.MUTE, pageIndex);
+      return partialListObj;
+    } catch (error) {
+      log.err("scraping", `Error in scrapeMutedUsersPage for page ${pageIndex}: ${error.message || error}`);
+      throw error; // Re-throw the error
+    }
+  }
 }
 
 export let scrapingHandler = new ScrapingHandler();

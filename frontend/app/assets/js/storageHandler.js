@@ -203,6 +203,45 @@ class StorageHandler {
       return 0;
     }
   }
+
+  /**
+   * Removes a list of usernames from the muted user list in local storage.
+   * Updates the stored list and the muted user count.
+   * @param {string[]} usernamesToRemove - An array of usernames to remove.
+   * @returns {Promise<void>} A promise that resolves on success, or rejects on error.
+   */
+  async removeMutedUsers(usernamesToRemove) {
+    if (!Array.isArray(usernamesToRemove) || usernamesToRemove.length === 0) {
+      log.warn('storage', 'removeMutedUsers called with empty or invalid list.');
+      return Promise.resolve(); // Nothing to remove
+    }
+
+    try {
+      const currentList = await this.getMutedUserList();
+      if (!currentList || currentList.length === 0) {
+        log.info('storage', 'removeMutedUsers: Muted user list is already empty.');
+        return Promise.resolve(); // List is already empty
+      }
+
+      // Create a Set of usernames to remove for efficient lookup
+      const usernamesToRemoveSet = new Set(usernamesToRemove);
+
+      // Filter the current list, keeping only users NOT in the remove set
+      const updatedList = currentList.filter(username => !usernamesToRemoveSet.has(username));
+
+      // Save the updated list
+      await this.saveMutedUserList(updatedList);
+
+      // Update the muted user count
+      await this.saveMutedUserCount(updatedList.length);
+
+      log.info('storage', `Removed ${usernamesToRemove.length} users from muted list storage. New count: ${updatedList.length}`);
+
+    } catch (error) {
+      log.err('storage', `Error removing muted users: ${error.message}`);
+      throw error; // Re-throw the error for the caller to handle
+    }
+  }
 }
 
 export let storageHandler = new StorageHandler();
