@@ -371,7 +371,7 @@ class ProgramController
     let totalUsersFound = 0; // Keep track of total users found across all pages
 
     try {
-      notificationHandler.notify("Starting to fetch and process muted users page by page...");
+      notificationHandler.notify("Sessize alınan kullanıcılar sayfa sayfa alınıyor ve işleniyor...");
 
       let isLastPage = false;
       let pageIndex = 0;
@@ -380,7 +380,7 @@ class ProgramController
       while (!isLastPage && !this.earlyStop) {
         pageIndex++;
         log.info("progctrl", `Fetching muted users page ${pageIndex}...`);
-        notificationHandler.notify(`Fetching muted users: Page ${pageIndex}...`);
+        notificationHandler.notify(`Sessize alınan kullanıcılar alınıyor: Sayfa ${pageIndex}...`);
 
         let partialListObj;
         try {
@@ -390,7 +390,7 @@ class ProgramController
           // Check for early stop after fetching a page
           if (this.earlyStop) {
             log.info("progctrl", "Blocking muted users stopped early by user during page fetch.");
-            notificationHandler.notify(`Blocking muted users stopped early. Processed ${processedCount} users.`);
+            notificationHandler.notify(`Sessize alınan kullanıcıları engelleme işlemi kullanıcı tarafından durduruldu. İşlenen: ${processedCount} kullanıcı.`);
             break; // Exit the while loop
           }
 
@@ -406,13 +406,13 @@ class ProgramController
           if (pageUsernames.length > 0) {
             totalUsersFound += pageUsernames.length;
             log.info("progctrl", `Found ${pageUsernames.length} users on page ${pageIndex}. Total found so far: ${totalUsersFound}`);
-            notificationHandler.notify(`Found ${pageUsernames.length} users on page ${pageIndex}. Total found so far: ${totalUsersFound}. Processing...`);
+            notificationHandler.notify(`Sayfa ${pageIndex}'de ${pageUsernames.length} kullanıcı bulundu. Şu ana kadar toplam: ${totalUsersFound}. İşleniyor...`);
 
             // Process users on the current page
             for (let i = 0; i < pageUsernames.length; i++) {
               if (this.earlyStop) {
                 log.info("progctrl", "Blocking muted users stopped early by user during page processing.");
-                notificationHandler.notify(`Blocking muted users stopped early. Processed ${processedCount} users.`);
+                notificationHandler.notify(`Sessize alınan kullanıcıları engelleme işlemi kullanıcı tarafından durduruldu. İşlenen: ${processedCount} kullanıcı.`);
                 break; // Exit the for loop
               }
 
@@ -423,7 +423,7 @@ class ProgramController
               // Update progress for the main processing loop
               // Use totalUsersFound for the planned action count
               notificationHandler.notifyOngoing(unmutedCount, processedCount, totalUsersFound);
-              notificationHandler.notify(`Processing user ${processedCount}/${totalUsersFound}: ${username}`);
+              notificationHandler.notify(`Kullanıcı işleniyor ${processedCount}/${totalUsersFound}: ${username}`);
 
               log.info("progctrl", `Processing user: ${username}...`);
 
@@ -431,7 +431,7 @@ class ProgramController
               let authorId = authorIdFromPage;
               if (!authorId || authorId === "0") {
                  log.info("progctrl", `Scraping user ID for: ${username}...`);
-                 notificationHandler.notify(`Scraping ID for: ${username}`);
+                 notificationHandler.notify(`ID alınıyor: ${username}`);
                  authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(username);
               }
 
@@ -439,7 +439,7 @@ class ProgramController
               if (!authorId || authorId === "0") {
                 log.err("progctrl", `Could not get user ID for ${username}. Skipping.`);
                 failedCount++;
-                notificationHandler.notify(`Could not get ID, skipping: ${username}`);
+                notificationHandler.notify(`ID alınamadı, atlanıyor: ${username}`);
                 continue; // Skip to the next user
               }
 
@@ -447,7 +447,7 @@ class ProgramController
 
               // Step B: Block the user
               log.info("progctrl", `Blocking user: ${username} (ID: ${authorId})...`);
-              notificationHandler.notify(`Blocking: ${username}`);
+              notificationHandler.notify(`Engelleniyor: ${username}`);
               const blockResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, true, false, false);
 
               // Check if early stop was triggered during the retry
@@ -459,18 +459,18 @@ class ProgramController
               if (blockResult.resultType !== enums.ResultType.SUCCESS) {
                 log.err("progctrl", `Failed to block user: ${username} (ID: ${authorId})`);
                 failedCount++;
-                notificationHandler.notify(`Failed to block: ${username}`);
+                notificationHandler.notify(`Engellenemedi: ${username}`);
                 continue; // Skip to the next user if block fails
               }
 
               log.info("progctrl", `Successfully blocked user: ${username} (ID: ${authorId})`);
               blockedCount++;
-              notificationHandler.notify(`Successfully blocked: ${username}`);
+              notificationHandler.notify(`Başarıyla engellendi: ${username}`);
 
 
               // Step C: Unmute the user
               log.info("progctrl", `Unmuting user: ${username} (ID: ${authorId})...`);
-              notificationHandler.notify(`Unmuting: ${username}`);
+              notificationHandler.notify(`Sessizden çıkarılıyor: ${username}`);
               const unmuteResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, false, false, true);
 
               // Check if early stop was triggered during the retry
@@ -482,11 +482,11 @@ class ProgramController
               if (unmuteResult.resultType !== enums.ResultType.SUCCESS) {
                 log.err("progctrl", `Failed to unmute user: ${username} (ID: ${authorId})`);
                 failedCount++; // Count as failed if unmute fails, even if block succeeded
-                notificationHandler.notify(`Failed to unmute: ${username}`);
+                notificationHandler.notify(`Sessizden çıkarılamadı: ${username}`);
               } else {
                 log.info("progctrl", `Successfully unmuted user: ${username} (ID: ${authorId})`);
                 unmutedCount++;
-                notificationHandler.notify(`Successfully unmuted: ${username}`);
+                notificationHandler.notify(`Başarıyla sessizden çıkarıldı: ${username}`);
                 successfullyProcessedUsernames.push(username); // Add to list for storage update
               }
 
@@ -536,7 +536,7 @@ class ProgramController
     } catch (error) {
       log.err("progctrl", `An unexpected error occurred during blocking muted users: ${error}`, error);
       // Use notify for error status
-      notificationHandler.notify(`An unexpected error occurred during blocking muted users: ${error.message || "Bilinmeyen error"}. Processed ${processedCount} users.`);
+      notificationHandler.notify(`Sessize alınan kullanıcıları engelleme sırasında beklenmedik bir hata oluştu: ${error.message || "Bilinmeyen hata"}. İşlenen: ${processedCount} kullanıcı.`);
     } finally {
       log.info("progctrl", "blockMutedUsers function completed.");
       this.earlyStop = false;
