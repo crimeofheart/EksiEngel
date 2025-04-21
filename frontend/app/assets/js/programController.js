@@ -149,32 +149,33 @@ class ProgramController
 
   // Simplified version that only uses alerts and only processes the first page of blocked users
   async migrateBlockedToMuted() {
-    log.info("progctrl", "migrateBlockedToMuted function started (simplified version).");
-    // Test comment for file modification
+    log.info("progctrl", "migrateBlockedToMuted function started.");
 
     // Check if already running
     if (this._migrationInProgress) {
        log.warn("progctrl", "Migration from Blocked to Muted is already in progress.");
-       // Can't use alert in background script
-       chrome.notifications.create({
-         type: 'basic',
-         iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
-         title: 'EksiEngel',
-         message: 'Migration is already in progress.'
-       });
+       try {
+         chrome.tabs.sendMessage(this.tabId, {
+           action: "updateMigrationStatus",
+           statusText: "Migration already in progress."
+         });
+       } catch (e) {
+         log.warn("progctrl", `Error sending status update: ${e}`);
+       }
        return;
     }
 
     // Check if the main processQueue is running something else
     if (processQueue.isRunning) {
        log.warn("progctrl", "Cannot start migration while another operation is running in the queue.");
-       // Can't use alert in background script
-       chrome.notifications.create({
-         type: 'basic',
-         iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
-         title: 'EksiEngel',
-         message: 'Cannot start migration while another operation is running.'
-       });
+       try {
+         chrome.tabs.sendMessage(this.tabId, {
+           action: "updateMigrationStatus",
+           statusText: "Cannot start migration while another operation is running."
+         });
+       } catch (e) {
+         log.warn("progctrl", `Error sending status update: ${e}`);
+       }
        return;
     }
 
@@ -185,11 +186,12 @@ class ProgramController
     try {
       // Fetch all blocked users
       log.info("progctrl", "Fetching all blocked users...");
+      // Send status update: Fetching users
+      notificationHandler.notify("Engellenen kullanıcılar alınıyor...");
       const scrapeResult = await scrapingHandler.scrapeAllBlockedUsers();
 
       if (!scrapeResult.success) {
         log.err("progctrl", `Failed to fetch blocked users: ${scrapeResult.error}`);
-        // Can't use alert in background script
         chrome.notifications.create({
           type: 'basic',
           iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
@@ -197,6 +199,7 @@ class ProgramController
           message: `Failed to fetch blocked users: ${scrapeResult.error}`
         });
         this._migrationInProgress = false;
+        notificationHandler.notify(`Engellenen kullanıcılar alınamadı: ${scrapeResult.error}`);
         return;
       }
 
@@ -205,7 +208,6 @@ class ProgramController
 
       if (blockedUsers.length === 0) {
         log.info("progctrl", "No blocked users found.");
-        // Can't use alert in background script
         chrome.notifications.create({
           type: 'basic',
           iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
@@ -213,6 +215,7 @@ class ProgramController
           message: 'No blocked users found.'
         });
         this._migrationInProgress = false;
+        notificationHandler.notify("Engellenen kullanıcı bulunamadı.");
         return;
       }
 
@@ -220,6 +223,9 @@ class ProgramController
 
       // No confirmation needed, we'll just proceed
       log.info("progctrl", `Proceeding with migration of ${blockedUsers.length} blocked users.`);
+      // Send status update: Starting migration
+      notificationHandler.notify(`Engellenen ${blockedUsers.length} kullanıcı sessize alınıyor...`);
+
 
       // Process users
       let migratedCount = 0;
@@ -232,19 +238,7 @@ class ProgramController
         // Check for early stop
         if (this.earlyStop) {
           log.info("progctrl", "Migration stopped early by user.");
-
-          // Send a final status update to the notification page
-          try {
-            chrome.tabs.sendMessage(this.tabId, {
-              action: "migrationStopped",
-              message: "Migration stopped by user.",
-              processed: i,
-              total: blockedUsers.length
-            });
-          } catch (e) {
-            log.warn("progctrl", `Error sending stop message: ${e}`);
-          }
-
+          notificationHandler.notify(`Taşıma işlemi kullanıcı tarafından durduruldu. İşlenen: ${i}/${blockedUsers.length}`);
           break;
         }
 
@@ -253,31 +247,24 @@ class ProgramController
         const totalUsers = blockedUsers.length;
         const percentage = Math.round((currentProgress / totalUsers) * 100);
 
-        // Update progress bar in notification page
-        try {
-          chrome.tabs.sendMessage(this.tabId, {
-            action: "updateMigrationProgress",
-            current: currentProgress,
-            total: totalUsers,
-            percentage: percentage
-          });
-        } catch (e) {
-          // Ignore errors sending to notification page
-          log.warn("progctrl", `Error updating progress bar: ${e}`);
-        }
+        // Update progress bar in notification page using notifyOngoing
+        notificationHandler.notifyOngoing(migratedCount, currentProgress, totalUsers);
 
-        // Log progress (every 3 users to avoid too many logs)
-        if (i % 3 === 0 || i === blockedUsers.length - 1) {
-          log.info("progctrl", `Processing user ${currentProgress}/${totalUsers}: ${user.authorName}`);
-        }
+        // Send status update: Processing current user
+        notificationHandler.notify(`İşleniyor: ${user.authorName} (${currentProgress}/${totalUsers})`);
+
 
         // Step A: Get the user ID by scraping their profile page
         log.info("progctrl", `Scraping user ID for: ${user.authorName}...`);
+        // Send status update: Scraping ID
+        notificationHandler.notify(`ID alınıyor: ${user.authorName}`);
         const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
 
         if (!authorId || authorId === "0") {
           log.err("progctrl", `Could not scrape user ID for ${user.authorName}. Skipping.`);
           failedCount++;
+          // Send status update: Failed to get ID
+          notificationHandler.notify(`ID alınamadı, atlanıyor: ${user.authorName}`);
           continue; // Skip to the next user
         }
 
@@ -285,6 +272,8 @@ class ProgramController
 
         // Step B: Unblock
         log.info("progctrl", `Unblocking user: ${user.authorName} (ID: ${authorId})...`);
+        // Send status update: Unblocking
+        notificationHandler.notify(`Engel kaldırılıyor: ${user.authorName}`);
         const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, true, false, false);
 
         // Check if early stop was triggered during the retry
@@ -296,6 +285,8 @@ class ProgramController
         if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to unblock user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
+          // Send status update: Unblock failed
+          notificationHandler.notify(`Engel kaldırılamadı, atlanıyor: ${user.authorName}`);
           continue; // Skip to the next user if unblock fails
         }
 
@@ -304,6 +295,8 @@ class ProgramController
         log.debug("progctrl", `Proceeding with muting regardless of config.enableMute setting`);
 
         log.info("progctrl", `Muting user: ${user.authorName} (ID: ${authorId})...`);
+        // Send status update: Muting
+        notificationHandler.notify(`Sessize alınıyor: ${user.authorName}`);
         const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, false, false, true);
 
         // Check if early stop was triggered during the retry
@@ -315,9 +308,13 @@ class ProgramController
         if (muteResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to mute user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
+          // Send status update: Mute failed
+          notificationHandler.notify(`Sessize alınamadı: ${user.authorName}`);
         } else {
           log.info("progctrl", `Successfully migrated user: ${user.authorName} (ID: ${authorId})`);
           migratedCount++;
+          // Send status update: Successfully migrated
+          notificationHandler.notify(`Başarıyla sessize alındı: ${user.authorName}`);
         }
 
         // Small delay between users
@@ -331,32 +328,14 @@ class ProgramController
 
       const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Failed: ${failedCount}, Total processed: ${migratedCount + failedCount}`;
       log.info("progctrl", finalMessage);
-      // Use sendMigrationMessage for final completion status
-      try {
-        chrome.tabs.sendMessage(this.tabId, {
-          action: "migrationComplete",
-          message: finalMessage,
-          migrated: migratedCount,
-          failed: failedCount,
-          total: migratedCount + failedCount
-        });
-      } catch (e) {
-        log.warn("progctrl", `Error sending migration complete message: ${e}`);
-      }
+      // Use notify for final completion status
+      notificationHandler.notify(finalMessage);
 
 
     } catch (error) {
       log.err("progctrl", `An error occurred during migration: ${error}`, error);
-      // Use sendMigrationMessage for error status
-      try {
-        chrome.tabs.sendMessage(this.tabId, {
-          action: "migrationComplete", // Use complete action to signal end
-          success: false,
-          error: error.message || "Unknown error during migration"
-        });
-      } catch (e) {
-        log.warn("progctrl", `Error sending migration error message: ${e}`);
-      }
+      // Use notify for error status
+      notificationHandler.notify(`Taşıma sırasında bir hata oluştu: ${error.message || "Bilinmeyen hata"}`);
     } finally {
       log.info("progctrl", "migrateBlockedToMuted function completed.");
       this.earlyStop = false;

@@ -108,6 +108,8 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
       try {
         await waitForNotificationPage;
         log.info("bg", "Notification page is ready.");
+        await utils.sleep(150); // Add a small delay to ensure message port is stable
+        log.info("bg", "Added 150ms delay after page ready.");
       } catch (e) {
         log.warn("bg", `Timed out waiting for notification page: ${e}. Proceeding anyway.`);
         // We'll proceed even if we time out, as the page might still load

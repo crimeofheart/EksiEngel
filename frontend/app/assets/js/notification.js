@@ -660,6 +660,17 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     return true;
   }
 
+  // Handle detailed migration status updates
+  if (message && message.action === "updateMigrationStatus") {
+    console.debug(`Received migration status update: ${message.statusText}`);
+    const migrationStatusText = document.getElementById("migrationStatusText");
+    if (migrationStatusText) {
+      migrationStatusText.innerHTML = message.statusText;
+    }
+    sendResponse({ status: "ok" });
+    return true;
+  }
+
   // Handle migration batch completion
   if (message && message.action === "migrationBatchComplete") {
     console.log(`Migration batch complete: ${message.message}`);
