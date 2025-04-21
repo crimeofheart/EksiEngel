@@ -158,6 +158,10 @@ class NotificationHandler
     this.#sendMessage(enums.NotificationType.ONGOING, "İşlem devam ediyor.", "", [], null, successfulAction, performedAction, plannedAction, 0);
   }
 
+  // Public method to send a simple status notification
+  notifyStatus = (statusText) => {
+    this.#sendMessage(enums.NotificationType.NOTIFY, statusText, "", [], null, 0, 0, 0, 0);
+  }
 
   // --- Migration Specific Notifications ---
   #sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed) => {

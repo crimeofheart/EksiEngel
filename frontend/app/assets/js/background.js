@@ -719,6 +719,7 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
     authorIdList = Array.from(scrapedRelations, ([name, value]) => value.authorId);
 
     notificationHandler.notifyOngoing(0, 0, scrapedRelations.size);
+    notificationHandler.notifyStatus("Takipçiler engelleniyor..."); // Added specific status before blocking loop
 
     for (const [name, value] of scrapedRelations)
     {
