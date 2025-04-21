@@ -25,8 +25,8 @@ img {
 }
 
 .button-section button.btn-green-candy {
-  display: block; /* Make buttons block for full width in their section */
-  width: 100%; /* Ensure full width */
+  /* Removed display: block for flexbox compatibility */
+  /* Removed width: 100% for flexbox compatibility */
   margin: 2px 0; /* Keep vertical margin, remove auto for horizontal */
   padding: 8px !important; /* Adjust padding */
   cursor: pointer;
@@ -49,7 +49,7 @@ img {
 .button-group {
   display: flex; /* Use flexbox for side-by-side buttons */
   /* Removed justify-content: space-between to allow equal width distribution */
-  align-items: center;
+  /* Removed align-items: center to allow stretching */
   gap: 5px; /* Add a small gap between buttons */
 }
 
@@ -65,7 +65,6 @@ img {
 #btnBlockTitlesOfBlockedMuted {
   padding: 6px 12px !important; /* Reduced padding */
   font-size: 14px; /* Adjusted for consistent font size */
-}
 
 #btnUnblockAndMute,
 #btnBlockMutedUsers {
@@ -87,6 +86,10 @@ img {
   /* width: 48%; Removed as flex-grow handles width */
   margin: 0; /* Remove margin set for block buttons */
   padding: 8px !important; /* Ensure consistent padding */
+}
+.button-group button.btn-green-candy {
+  display: initial; /* Override display: block from general button styles */
+  width: initial; /* Override width: 100% from general button styles */
 }
 
 #mutedInfo {
@@ -123,4 +126,19 @@ img {
     /* Keep existing styles that don't conflict */
     border-radius: 3px; /* From .switch-candy a */
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.45); /* From .switch-candy a */
+}
+
+.equal-width-buttons button {
+  flex-grow: 1;
+  line-height: 1.2em; /* Added line height for consistent text spacing */
+  display: flex; /* Use flexbox to center text vertically */
+  align-items: center;
+  justify-content: center;
+  text-align: center; /* Ensure text is centered */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  height: 75px; /* Explicitly set height to ensure equal size */
+}
+.button-group.equal-width-buttons {
+  align-items: stretch; /* Make flex items (buttons) stretch to fill the container height */
+}
 }
