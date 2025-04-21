@@ -699,6 +699,86 @@ class ScrapingHandler
     }
   }
 
+  /**
+   * Scrapes all pages of users whose titles are blocked from Ekşi Sözlük.
+   * Handles pagination and polite delays, reporting progress via callback.
+   * @param {function({currentPage: number, currentCount: number}): void} [progressCallback] - Optional callback for progress updates.
+   * @returns {Promise<{success: boolean, count?: number, users?: {authorId: string, authorName: string}[], error?: string}>}
+   */
+  async scrapeAllUsersWithBlockedTitles(progressCallback) {
+    log.info("scraping", "Starting to scrape all users with blocked titles...");
+    let scrapedUsers = []; // Store objects with authorId and authorName
+    let isLast = false;
+    let index = 0;
+    let totalCount = 0;
+    const politeDelayMs = 500; // Delay between page requests in milliseconds
+
+    try {
+      while (!isLast) {
+        // Check for early stop request before fetching the next page
+        if (programController.earlyStop) {
+          log.info("scraping", "Scraping users with blocked titles stopped early by user request.");
+          // Return the count found so far
+          return { success: false, users: scrapedUsers, count: totalCount, stoppedEarly: true, error: "Process stopped by user" };
+        }
+
+        index++;
+        log.info("scraping", `Fetching page ${index} of users with blocked titles...`);
+        let partialListObj;
+        try {
+          // Use TITLE target type
+          partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.TITLE, index);
+        } catch (pageError) {
+          log.err("scraping", `Error fetching page ${index} of users with blocked titles: ${pageError}`);
+          // Stop on page error, return count found so far
+          throw new Error(`Failed to fetch page ${index} of users with blocked titles: ${pageError.message || pageError}`);
+        }
+
+        const partialNameList = partialListObj.authorNameList;
+        const partialIdList = partialListObj.authorIdList;
+        isLast = partialListObj.isLast;
+
+        // Add users to the list, storing both ID and Name
+        for(let i = 0; i < partialIdList.length; i++) {
+            scrapedUsers.push({ authorId: partialIdList[i], authorName: partialNameList[i] });
+        }
+        totalCount += partialIdList.length;
+
+
+        log.info("scraping", `Found ${partialIdList.length} users with blocked titles on page ${index}. Total found: ${totalCount}`);
+
+        // Call the progress callback if provided
+        if (progressCallback && typeof progressCallback === 'function') {
+          try {
+            // Pass the current total count
+            await progressCallback({ currentCount: totalCount });
+          } catch (callbackError) {
+            log.warn("scraping", `Error in progress callback for users with blocked titles: ${callbackError}`);
+            // Continue even if callback fails
+          }
+        }
+
+        // Optional delay can be added here if needed: await utils.delay(config.scrapeDelayMs);
+        if (!isLast) {
+           await utils.sleep(politeDelayMs); // Wait before fetching the next page
+        }
+      }
+
+      log.info("scraping", `Successfully scraped all ${totalCount} users with blocked titles.`);
+      return { success: true, users: scrapedUsers, count: totalCount };
+
+    } catch (err) {
+      log.err("scraping", `Error during scrapeAllUsersWithBlockedTitles: ${err}`);
+      // Check if it was an early stop triggered by an error within the loop/page fetch
+      if (programController.earlyStop) {
+         // Return count found so far
+         return { success: false, users: scrapedUsers, count: totalCount, stoppedEarly: true, error: err.message || "Process stopped due to error" };
+      }
+      // Return count found so far even on other errors
+      return { success: false, users: scrapedUsers, count: totalCount, error: err.message || "Unknown error during scraping" };
+    }
+  }
+
 
   #scrapeFollowerPartially = async (scrapedRelations, authorName, index) =>
   {

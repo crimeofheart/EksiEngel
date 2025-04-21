@@ -66,42 +66,47 @@ class NotificationHandler
  
   }
 
-  #notify = (statusText) => {
+  notify = (statusText) => {
     this.#sendMessage(enums.NotificationType.NOTIFY, statusText, "", [], null, 0, 0, 0, 0);
   }
+
+  updateMutedUserCountDisplay = () => {
+    log.info("notification", "updateMutedUserCountDisplay called (placeholder)");
+    // TODO: Implement actual logic to update the muted user count display
+  }
   notifyControlAccess = () => {
-    this.#notify("Ekşi Sözlük'e erişim kontrol ediliyor.");
+    this.notify("Ekşi Sözlük'e erişim kontrol ediliyor.");
   }
   notifyControlLogin = () => {
-    this.#notify("Ekşi Sözlük'e giriş yapıp yapmadığınız kontrol ediliyor.");
+    this.notify("Ekşi Sözlük'e giriş yapıp yapmadığınız kontrol ediliyor.");
   }
   notifyScrapeFavs = () => {
-    this.#notify("Hedef entry'i favorileyen yazarlar toplanıyor.");
+    this.notify("Hedef entry'i favorileyen yazarlar toplanıyor.");
   }
   notifyScrapeFollowers = () => {
-    this.#notify("Hedef yazarın takipçileri toplanıyor.");
+    this.notify("Hedef yazarın takipçileri toplanıyor.");
   }
   notifyScrapeFollowings = () => {
-    this.#notify("Takip ettiğiniz yazarlar toplanıyor.");
+    this.notify("Takip ettiğiniz yazarlar toplanıyor.");
   }
   notifyScrapeBanned = () => {
-    this.#notify("Engellediğiniz yazarlar toplanıyor.");
+    this.notify("Engellediğiniz yazarlar toplanıyor.");
   }
   notifyAnalysisProtectFollowedUsers = () => {
-    this.#notify("Takip ettiğiniz yazarlar, engellenecek yazarlar listesinden çıkarılıyor.");
+    this.notify("Takip ettiğiniz yazarlar, engellenecek yazarlar listesinden çıkarılıyor.");
   }
   notifyAnalysisOnlyRequiredActions = () => {
-    this.#notify("Daha önce engellediğiniz yazarlar, engellenecek yazarlar listesinden çıkarılıyor.");
+    this.notify("Daha önce engellediğiniz yazarlar, engellenecek yazarlar listesinden çıkarılıyor.");
   }
   notifyScrapeIDs = () => {
-    this.#notify("Yazar ID'leri toplanıyor (Bu işlem biraz sürebilir)...");
+    this.notify("Yazar ID'leri toplanıyor (Bu işlem biraz sürebilir)...");
   }
   notifyScrapeIDsProgress = (index, total) => {
-    this.#notify(`Yazar ID'leri toplanıyor (${index}/${total})...`);
+    this.notify(`Yazar ID'leri toplanıyor (${index}/${total})...`);
   }
   notifyScrapeTitleAuthors = (timeSpecifier) => {
     let timeText = timeSpecifier === enums.TimeSpecifier.ALL ? "(tümü)" : "(son 24 saat)";
-    this.#notify(`Hedef başlıkta ${timeText} entry'si bulunan yazarlar toplanıyor.`);
+    this.notify(`Hedef başlıkta ${timeText} entry'si bulunan yazarlar toplanıyor.`);
   }
 
   #finish = (banSource, banMode, statusText, errorText, successfulAction, performedAction, plannedAction) => {
@@ -164,7 +169,7 @@ class NotificationHandler
   }
 
   // --- Migration Specific Notifications ---
-  #sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed) => {
+  sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed) => {
     // Reusing existing fields where possible, adding migration-specific ones
     let message = {
       status: enums.NotificationType.MIGRATION_UPDATE,
@@ -190,35 +195,35 @@ class NotificationHandler
   }
 
   notifyMigrationStart = () => {
-    this.#sendMigrationMessage('started', "Engellenenleri Sessize Alma işlemi başlatılıyor...", "", 0, 0, 0, 0, 0);
+    this.sendMigrationMessage('started', "Engellenenleri Sessize Alma işlemi başlatılıyor...", "", 0, 0, 0, 0, 0);
   }
 
   notifyMigrationAlreadyRunning = () => {
-    this.#sendMigrationMessage('error', "Taşıma işlemi zaten चल रहा है.", "Zaten चल रहा है", 0, 0, 0, 0, 0);
+    this.sendMigrationMessage('error', "Taşıma işlemi zaten चल रहा है.", "Zaten चल रहा है", 0, 0, 0, 0, 0);
     // Also consider a simple alert or console log as backup if notification page isn't guaranteed
     alert("Engellenenleri Sessize Alma işlemi zaten चल रहा है.");
   }
 
   notifyMigrationBlockedByQueue = () => {
-    this.#sendMigrationMessage('error', "Başka bir işlem (örn. FAV engelleme) चल रहा है.", "Kuyruk meşgul", 0, 0, 0, 0, 0);
+    this.sendMigrationMessage('error', "Başka bir işlem (örn. FAV engelleme) चल रहा है.", "Kuyruk meşgul", 0, 0, 0, 0, 0);
     alert("Başka bir işlem (örn. FAV engelleme) चल रहा iken taşıma işlemi başlatılamaz.");
   }
 
   notifyMigrationStatus = (statusText) => {
     // Sends a general status update without changing counts
-    this.#sendMigrationMessage('progress', statusText, "", null, null, null, null, null); // Use null for counts to indicate no change
+    this.sendMigrationMessage('progress', statusText, "", null, null, null, null, null); // Use null for counts to indicate no change
   }
 
   notifyMigrationProgress = (statusText, current, total) => {
-    this.#sendMigrationMessage('progress', statusText, "", current, total, null, null, null); // Update progress counts
+    this.sendMigrationMessage('progress', statusText, "", current, total, null, null, null); // Update progress counts
   }
 
   notifyMigrationFinish = (finalMessage, migrated, skipped, failed, totalProcessed) => {
-    this.#sendMigrationMessage('finished', finalMessage, "", totalProcessed, totalProcessed, migrated, skipped, failed);
+    this.sendMigrationMessage('finished', finalMessage, "", totalProcessed, totalProcessed, migrated, skipped, failed);
   }
 
   notifyMigrationError = (errorMessage) => {
-    this.#sendMigrationMessage('error', "Taşıma sırasında bir hata oluştu.", errorMessage, null, null, null, null, null);
+    this.sendMigrationMessage('error', "Taşıma sırasında bir hata oluştu.", errorMessage, null, null, null, null, null);
   }
   // --- End Migration Specific Notifications ---
 }

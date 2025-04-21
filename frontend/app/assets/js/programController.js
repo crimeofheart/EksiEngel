@@ -150,6 +150,7 @@ class ProgramController
   // Simplified version that only uses alerts and only processes the first page of blocked users
   async migrateBlockedToMuted() {
     log.info("progctrl", "migrateBlockedToMuted function started (simplified version).");
+    // Test comment for file modification
 
     // Check if already running
     if (this._migrationInProgress) {
@@ -182,26 +183,40 @@ class ProgramController
     this.earlyStop = false; // Reset early stop flag
 
     try {
-      // Use the simplified method that only fetches the first page
-      log.info("progctrl", "Fetching first page of blocked users...");
-      const blockedUsersMap = await scrapingHandler.scrapeBlockedUsersFirstPage();
+      // Fetch all blocked users
+      log.info("progctrl", "Fetching all blocked users...");
+      const scrapeResult = await scrapingHandler.scrapeAllBlockedUsers();
 
-      if (!blockedUsersMap || blockedUsersMap.size === 0) {
-        log.info("progctrl", "No blocked users found on first page.");
+      if (!scrapeResult.success) {
+        log.err("progctrl", `Failed to fetch blocked users: ${scrapeResult.error}`);
         // Can't use alert in background script
         chrome.notifications.create({
           type: 'basic',
           iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
-          title: 'EksiEngel',
-          message: 'No blocked users found on the first page.'
+          title: 'EksiEngel - Error',
+          message: `Failed to fetch blocked users: ${scrapeResult.error}`
         });
         this._migrationInProgress = false;
         return;
       }
 
-      // Convert map to array for processing
-      const blockedUsers = Array.from(blockedUsersMap.values());
-      log.info("progctrl", `Found ${blockedUsers.length} blocked users on first page.`);
+      const blockedUsers = scrapeResult.usernames.map(username => ({ authorName: username, authorId: null })); // Create objects with placeholder ID
+      const totalBlockedUsers = scrapeResult.count;
+
+      if (blockedUsers.length === 0) {
+        log.info("progctrl", "No blocked users found.");
+        // Can't use alert in background script
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
+          title: 'EksiEngel',
+          message: 'No blocked users found.'
+        });
+        this._migrationInProgress = false;
+        return;
+      }
+
+      log.info("progctrl", `Found ${blockedUsers.length} blocked users.`);
 
       // No confirmation needed, we'll just proceed
       log.info("progctrl", `Proceeding with migration of ${blockedUsers.length} blocked users.`);
@@ -377,25 +392,39 @@ class ProgramController
 
         log.info("progctrl", `Blocking user: ${user.authorName} (ID: ${user.authorId || 'N/A'})...`);
 
-        // Step A: Block the user
-        // We don't have the authorId for muted users from storage, so we can't use the ID-based blocking.
-        // This requires navigating to the user's profile page and clicking the block button.
-        // This is a complex scraping task and is outside the scope of this immediate button implementation.
-        // The logic below will be a placeholder that logs the intent but doesn't perform the actual blocking.
-        // A future task will be needed to implement the actual user blocking logic for muted users without IDs.
-        log.warn("progctrl", `Blocking logic for muted user ${user.authorName} is a placeholder and not yet implemented.`);
+        // Step A: Get the user ID by scraping their profile page
+        log.info("progctrl", `Scraping user ID for: ${user.authorName}...`);
+        const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
 
-        // Simulate some work and potential failure for demonstration
-        await utils.sleep(1000); // Simulate scraping/processing time
-        const success = Math.random() > 0.1; // Simulate 90% success rate
-        if (success) {
-           log.info("progctrl", `Simulated successful blocking for user: ${user.authorName}`);
-           blockedCount++;
-           usersToRemoveFromMuted.push(user.authorName); // Add to list for removal from muted storage
-        } else {
-           log.err("progctrl", `Simulated failed blocking for user: ${user.authorName}`);
-           failedCount++;
+        if (!authorId) {
+          log.err("progctrl", `Could not scrape user ID for ${user.authorName}. Skipping.`);
+          failedCount++;
+          continue; // Skip to the next user
         }
+
+        log.info("progctrl", `Successfully scraped user ID for ${user.authorName}: ${authorId}`);
+
+        // Step B: Block the user using the scraped ID
+        log.info("progctrl", `Blocking user: ${user.authorName} (ID: ${authorId})...`);
+        const blockResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, true, false, false);
+
+        // Check if early stop was triggered during the retry
+        if (blockResult.earlyStop) {
+          log.info("progctrl", "Blocking muted users stopped early by user during block operation.");
+          break;
+        }
+
+        if (blockResult.resultType !== enums.ResultType.SUCCESS) {
+          log.err("progctrl", `Failed to block user: ${user.authorName} (ID: ${authorId})`);
+          failedCount++;
+        } else {
+          log.info("progctrl", `Successfully blocked user: ${user.authorName} (ID: ${authorId})`);
+          blockedCount++;
+          usersToRemoveFromMuted.push(user.authorName); // Add to list for removal from muted storage
+        }
+
+        // Small delay between users
+        await utils.sleep(500); // Assuming a small delay is appropriate
       }
 
       // Update the muted user list in storage by removing the users that were successfully blocked
@@ -496,6 +525,7 @@ class ProgramController
       // A future task will be needed to implement the actual title scraping and blocking logic.
       // I will add a decision log entry about this.
       // *** END LIMITATION NOTE ***
+// TODO: Implement actual scraping of user profile pages to get entry IDs and then block titles.
 
       // Simulate processing each user for title blocking
       for (let i = 0; i < usersToProcess.length; i++) {
@@ -544,6 +574,108 @@ class ProgramController
       // No specific display update needed for this operation currently
     }
   }
+
+  async migrateBlockedTitlesToUnblocked() {
+    log.info("progctrl", "migrateBlockedTitlesToUnblocked function started.");
+
+    if (this._blockTitlesInProgress) { // Reusing this flag for simplicity, could create a new one if needed
+      log.warn("progctrl", "Unblocking blocked titles is already in progress.");
+      notificationHandler.notify("Unblocking blocked titles is already in progress.");
+      return;
+    }
+
+    if (processQueue.isRunning) {
+      log.warn("progctrl", "Cannot start unblocking titles while another operation is running.");
+      notificationHandler.notify("Cannot start unblocking titles while another operation is running.");
+      return;
+    }
+
+    this._blockTitlesInProgress = true; // Reusing flag
+    this.earlyStop = false;
+
+    try {
+      notificationHandler.notify("Fetching list of users with blocked titles...");
+
+      const scrapeResult = await scrapingHandler.scrapeAllUsersWithBlockedTitles(
+        (progress) => {
+          // Optional: Update UI with list fetching progress if needed
+          // notificationHandler.notifyProgress(`Fetching users with blocked titles: Page ${progress.currentPage}, Found ${progress.currentCount}`, progress.currentCount, totalCountPlaceholder); // Need total count
+        }
+      );
+
+      if (!scrapeResult.success) {
+        log.err("progctrl", `Failed to fetch list of users with blocked titles: ${scrapeResult.error}`);
+        notificationHandler.notify(`Failed to fetch list of users with blocked titles: ${scrapeResult.error}`);
+        return;
+      }
+
+      const usersWithBlockedTitles = scrapeResult.users;
+      const totalCount = scrapeResult.count;
+
+      if (usersWithBlockedTitles.length === 0) {
+        log.info("progctrl", "No users with blocked titles found.");
+        notificationHandler.notify("No users with blocked titles found.");
+        return;
+      }
+
+      log.info("progctrl", `Successfully fetched list of ${totalCount} users with blocked titles. Starting unblocking process...`);
+      notificationHandler.notify(`Found ${totalCount} users with blocked titles. Starting unblocking process...`);
+
+
+      let unblockedCount = 0;
+      let failedCount = 0;
+
+      // Process users to unblock their titles
+      for (let i = 0; i < usersWithBlockedTitles.length; i++) {
+        if (this.earlyStop) {
+          log.info("progctrl", "Unblocking titles stopped early by user.");
+          notificationHandler.notify(`Unblocking titles stopped early. Processed ${i}/${usersWithBlockedTitles.length} users.`);
+          break;
+        }
+
+        const user = usersWithBlockedTitles[i];
+        // Use sendMigrationMessage for progress updates
+        notificationHandler.sendMigrationMessage('progress', `Unblocking titles for user ${i + 1}/${usersWithBlockedTitles.length}: ${user.authorName}`, "", i + 1, usersWithBlockedTitles.length, null, null, null);
+
+        log.info("progctrl", `Unblocking titles for user: ${user.authorName} (ID: ${user.authorId})...`);
+
+        // Perform the unblocking action for titles associated with this user ID
+        // Note: The API unblocks *all* titles by this user if any were blocked via the relation-list endpoint.
+        const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, user.authorId, false, true, false);
+
+        // Check if early stop was triggered during the retry
+        if (unblockResult.earlyStop) {
+          log.info("progctrl", "Unblocking titles stopped early by user during action.");
+          break;
+        }
+
+        if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
+          log.err("progctrl", `Failed to unblock titles for user: ${user.authorName}`);
+          failedCount++;
+        } else {
+          log.info("progctrl", `Successfully unblocked titles for user: ${user.authorName}`);
+          unblockedCount++;
+        }
+
+        // Small delay between users
+        await utils.sleep(500); // Assuming a small delay is appropriate
+      }
+
+      const finalMessage = `Unblocking blocked titles completed. Successfully unblocked users: ${unblockedCount}, Failed users: ${failedCount}, Total users processed: ${usersWithBlockedTitles.length}`;
+      log.info("progctrl", finalMessage);
+      notificationHandler.notify(finalMessage);
+
+    } catch (error) {
+      log.err("progctrl", `An error occurred during unblocking blocked titles: ${error}`, error);
+      notificationHandler.notify(`An error occurred during unblocking blocked titles: ${error.message}`);
+    } finally {
+      log.info("progctrl", "migrateBlockedTitlesToUnblocked function completed.");
+      this.earlyStop = false;
+      this._blockTitlesInProgress = false; // Reset flag
+      // No specific display update needed for this operation currently
+    }
+  }
+
 }
 
 export const programController = new ProgramController();

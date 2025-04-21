@@ -131,9 +131,9 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
         programController.migrateBlockedToMuted();
       }
 
-      // Send response immediately for this message type
-      sendResponse({ status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated` });
-      return; // Don't process further as a standard ban/unban
+      // Indicate that the response will be sent asynchronously
+      // The actual response (success/failure) will be sent via chrome.tabs.sendMessage
+      // from programController.js when the operation completes.
       return true; // Indicate asynchronous response
     } else if (message.action === "refreshMutedList") {
       log.info("bg", "Handling refreshMutedList request from popup.");
