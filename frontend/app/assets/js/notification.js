@@ -66,10 +66,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 
   // Send a message to the background script that the notification page is ready
-  setTimeout(() => {
-    chrome.runtime.sendMessage(null, { action: "notificationPageReady" });
-    console.log("Notification page ready message sent");
-  }, 500); // Small delay to ensure DOM is fully initialized
+  chrome.runtime.sendMessage(null, { action: "notificationPageReady" });
+  console.log("Notification page ready message sent");
+  // Removed 500ms delay
+
 
   // Load and display the initial muted user count from storage
   async function loadMutedUserCount() {

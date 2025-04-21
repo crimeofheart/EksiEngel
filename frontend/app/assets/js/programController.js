@@ -271,9 +271,21 @@ class ProgramController
           log.info("progctrl", `Processing user ${currentProgress}/${totalUsers}: ${user.authorName}`);
         }
 
-        // Step A: Unblock
-        log.info("progctrl", `Unblocking user: ${user.authorName}`);
-        const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, user.authorId, true, false, false);
+        // Step A: Get the user ID by scraping their profile page
+        log.info("progctrl", `Scraping user ID for: ${user.authorName}...`);
+        const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
+
+        if (!authorId || authorId === "0") {
+          log.err("progctrl", `Could not scrape user ID for ${user.authorName}. Skipping.`);
+          failedCount++;
+          continue; // Skip to the next user
+        }
+
+        log.info("progctrl", `Successfully scraped user ID for ${user.authorName}: ${authorId}`);
+
+        // Step B: Unblock
+        log.info("progctrl", `Unblocking user: ${user.authorName} (ID: ${authorId})...`);
+        const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, true, false, false);
 
         // Check if early stop was triggered during the retry
         if (unblockResult.earlyStop) {
@@ -282,17 +294,17 @@ class ProgramController
         }
 
         if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
-          log.err("progctrl", `Failed to unblock user: ${user.authorName}`);
+          log.err("progctrl", `Failed to unblock user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
-          continue;
+          continue; // Skip to the next user if unblock fails
         }
 
         // For this specific feature, we always want to mute regardless of config setting
         // The whole point of this feature is to migrate from blocked to muted
         log.debug("progctrl", `Proceeding with muting regardless of config.enableMute setting`);
 
-        log.info("progctrl", `Muting user: ${user.authorName}`);
-        const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, user.authorId, false, false, true);
+        log.info("progctrl", `Muting user: ${user.authorName} (ID: ${authorId})...`);
+        const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, false, false, true);
 
         // Check if early stop was triggered during the retry
         if (muteResult.earlyStop) {
@@ -301,10 +313,10 @@ class ProgramController
         }
 
         if (muteResult.resultType !== enums.ResultType.SUCCESS) {
-          log.err("progctrl", `Failed to mute user: ${user.authorName}`);
+          log.err("progctrl", `Failed to mute user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
         } else {
-          log.info("progctrl", `Successfully migrated user: ${user.authorName}`);
+          log.info("progctrl", `Successfully migrated user: ${user.authorName} (ID: ${authorId})`);
           migratedCount++;
         }
 
@@ -312,32 +324,45 @@ class ProgramController
         await utils.sleep(500);
       }
 
-      // Update the muted user list in storage by removing the users that were successfully blocked
-      if (usersToRemoveFromMuted.length > 0) {
-        const updatedMutedList = mutedUsers.filter(user => !usersToRemoveFromMuted.includes(user));
-        await storageHandler.saveMutedUserList(updatedMutedList);
-        log.info("progctrl", `Removed ${usersToRemoveFromMuted.length} users from the muted list in storage.`);
+      // Note: The migrateBlockedToMuted function does not remove users from a local muted list
+      // because it's migrating *from* blocked *to* muted. The muted list is the destination.
+      // The logic for usersToRemoveFromMuted and updating muted storage was incorrectly
+      // copied from blockMutedUsers. Removing it here.
+
+      const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Failed: ${failedCount}, Total processed: ${migratedCount + failedCount}`;
+      log.info("progctrl", finalMessage);
+      // Use sendMigrationMessage for final completion status
+      try {
+        chrome.tabs.sendMessage(this.tabId, {
+          action: "migrationComplete",
+          message: finalMessage,
+          migrated: migratedCount,
+          failed: failedCount,
+          total: migratedCount + failedCount
+        });
+      } catch (e) {
+        log.warn("progctrl", `Error sending migration complete message: ${e}`);
       }
 
-      const finalMessage = `Blocking muted users completed. Successfully blocked: ${blockedCount}, Failed: ${failedCount}, Total processed: ${blockedCount + failedCount}`;
-      log.info("progctrl", finalMessage);
-      notificationHandler.notify(finalMessage);
 
     } catch (error) {
       log.err("progctrl", `An error occurred during migration: ${error}`, error);
-      // Can't use alert in background script
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: chrome.runtime.getURL('assets/img/eksiengel48.png'),
-        title: 'EksiEngel - Error',
-        message: `An error occurred during migration: ${error.message}`
-      });
+      // Use sendMigrationMessage for error status
+      try {
+        chrome.tabs.sendMessage(this.tabId, {
+          action: "migrationComplete", // Use complete action to signal end
+          success: false,
+          error: error.message || "Unknown error during migration"
+        });
+      } catch (e) {
+        log.warn("progctrl", `Error sending migration error message: ${e}`);
+      }
     } finally {
-      log.info("progctrl", "blockMutedUsers function completed.");
+      log.info("progctrl", "migrateBlockedToMuted function completed.");
       this.earlyStop = false;
       this._migrationInProgress = false;
-      // Refresh muted user count display after the operation
-      notificationHandler.updateMutedUserCountDisplay();
+      // No specific display update needed for this operation currently,
+      // as the notification page handles the final status display.
     }
   }
 
