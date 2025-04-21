@@ -478,8 +478,13 @@ class ProgramController
       notificationHandler.notify("Fetching blocked and muted user lists...");
 
       // Get blocked users (assuming scrapingHandler can fetch all blocked users)
-      const blockedUsersMap = await scrapingHandler.scrapeBlockedUsers(); // Assuming this fetches all pages
-      const blockedUsers = blockedUsersMap ? Array.from(blockedUsersMap.values()) : [];
+      const blockedUsersResult = await scrapingHandler.scrapeAllBlockedUsers();
+      if (!blockedUsersResult.success) {
+          log.err("progctrl", `Failed to fetch blocked users: ${blockedUsersResult.error}`);
+          notificationHandler.notify(`Failed to fetch blocked users: ${blockedUsersResult.error}`);
+          return; // Stop the process if fetching blocked users fails
+      }
+      const blockedUsers = blockedUsersResult.usernames.map(username => ({ authorName: username, authorId: null })); // Create objects with placeholder ID
       log.info("progctrl", `Found ${blockedUsers.length} blocked users.`);
 
       // Get muted users (assuming storageHandler.getMutedUserList returns usernames)
@@ -518,20 +523,16 @@ class ProgramController
       log.info("progctrl", `Found ${usersToProcess.length} unique blocked/muted users to process titles for.`);
       notificationHandler.notify(`Found ${usersToProcess.length} unique blocked/muted users. Starting title blocking process...`);
 
-      let titlesBlockedCount = 0;
+      let serverBlockedTitlesCount = 0; // Titles blocked via server API (for blocked users)
+      let simulatedBlockedTitlesCount = 0; // Titles hidden client-side (for muted users)
       let usersProcessedCount = 0;
       let failedUsersCount = 0;
+      let successfulUsersCount = 0; // New counter for users successfully processed
 
-      // *** LIMITATION NOTE ***
-      // Blocking titles requires scraping the user's profile page to get their entries' IDs.
-      // This is a complex scraping task and is outside the scope of this immediate button implementation.
-      // The logic below will be a placeholder that logs the intent but doesn't perform the actual scraping and blocking of titles.
-      // A future task will be needed to implement the actual title scraping and blocking logic.
-      // I will add a decision log entry about this.
-      // *** END LIMITATION NOTE ***
-// TODO: Implement actual scraping of user profile pages to get entry IDs and then block titles.
+      // Initial progress notification
+      notificationHandler.notifyOngoing(successfulUsersCount, usersProcessedCount, usersToProcess.length);
 
-      // Simulate processing each user for title blocking
+
       for (let i = 0; i < usersToProcess.length; i++) {
         if (this.earlyStop) {
           log.info("progctrl", "Blocking titles stopped early by user.");
@@ -540,41 +541,109 @@ class ProgramController
         }
 
         const user = usersToProcess[i];
-        notificationHandler.notifyProgress(`Processing titles for user ${i + 1}/${usersToProcess.length}: ${user.authorName}`, i + 1, usersToProcess.length);
+        // Determine if the user was originally in the blocked list (to decide on server vs client action)
+        const isOriginallyBlocked = blockedUsers.some(blockedUser => blockedUser.authorName === user.authorName);
 
-        log.info("progctrl", `Processing titles for user: ${user.authorName} (ID: ${user.authorId || 'N/A'})...`);
+        // Update progress before processing each user
+        notificationHandler.notifyOngoing(successfulUsersCount, usersProcessedCount, usersToProcess.length);
 
-        // Placeholder for actual title scraping and blocking logic
-        log.warn("progctrl", `Title blocking logic for user ${user.authorName} is a placeholder and not yet implemented.`);
 
-        // Simulate some work and potential failure for demonstration
-        await utils.sleep(500); // Simulate scraping/processing time
-        const success = Math.random() > 0.2; // Simulate 80% success rate for processing user's titles
+        log.info("progctrl", `Attempting to process titles for user: ${user.authorName} (ID: ${user.authorId || 'N/A'})...`);
 
-        if (success) {
-           log.info("progctrl", `Simulated successful title processing for user: ${user.authorName}`);
-           // Simulate blocking a random number of titles (between 0 and 5)
-           const blockedThisUser = Math.floor(Math.random() * 6);
-           titlesBlockedCount += blockedThisUser;
-           log.info("progctrl", `Simulated blocking ${blockedThisUser} titles for user ${user.authorName}. Total titles blocked: ${titlesBlockedCount}`);
-        } else {
-           log.err("progctrl", `Simulated failed title processing for user: ${user.authorName}`);
-           failedUsersCount++;
+        // Ensure user has an ID before attempting any action
+        let authorId = user.authorId;
+        if (!authorId || authorId === "0") {
+            log.info("progctrl", `Scraping user ID for: ${user.authorName}...`);
+            authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
+
+            if (!authorId || authorId === "0") {
+                log.warn("progctrl", `Skipping title processing for user ${user.authorName} due to missing or invalid ID after scraping.`);
+                failedUsersCount++;
+                usersProcessedCount++;
+                // Update progress after skipping a user
+                notificationHandler.notifyOngoing(successfulUsersCount, usersProcessedCount, usersToProcess.length);
+                continue; // Skip to the next user
+            }
+             log.info("progctrl", `Successfully scraped user ID for ${user.authorName}: ${authorId}`);
+             user.authorId = authorId; // Update the user object with the scraped ID
         }
+
+
+        let actionSuccessful = false; // Flag to track if the action for this user was successful
+
+        if (isOriginallyBlocked) {
+            // User was originally blocked, attempt server-side title block
+            log.info("progctrl", `Attempting server-side title block for blocked user: ${user.authorName} (ID: ${user.authorId})...`);
+            const blockResult = await this._performActionWithRetry(enums.BanMode.BAN, user.authorId, false, true, false);
+
+            if (blockResult.earlyStop) {
+              log.info("progctrl", "Blocking titles stopped early by user during server-side action.");
+              break; // Exit the loop if early stop is triggered
+            }
+
+            if (blockResult.resultType !== enums.ResultType.SUCCESS) {
+              log.err("progctrl", `Failed to block titles server-side for user: ${user.authorName} (ID: ${user.authorId})`);
+              failedUsersCount++;
+            } else {
+              log.info("progctrl", `Successfully blocked titles server-side for user: ${user.authorName}`);
+              serverBlockedTitlesCount++;
+              actionSuccessful = true; // Mark action as successful
+            }
+        } else {
+            // User is only muted, perform client-side title hiding
+            log.info("progctrl", `Attempting client-side title hiding for muted user: ${user.authorName} (ID: ${user.authorId})...`);
+            // Send message to content script to hide titles by this author ID
+            try {
+                const response = await chrome.tabs.sendMessage(this.tabId, {
+                    action: "hideTitlesByAuthorId",
+                    authorId: user.authorId
+                });
+                if (response && response.success) {
+                    log.info("progctrl", `Successfully requested client-side hiding for user: ${user.authorName}. Hidden titles count: ${response.hiddenCount}`);
+                    simulatedBlockedTitlesCount += response.hiddenCount;
+                    actionSuccessful = true; // Mark action as successful
+                } else {
+                    log.warn("progctrl", `Client-side hiding request failed or returned no count for user: ${user.authorName}`);
+                    failedUsersCount++; // Count as failed if client-side hiding fails
+                }
+            } catch (e) {
+                log.err("progctrl", `Error sending client-side hiding message for user ${user.authorName}: ${e}`);
+                failedUsersCount++; // Count as failed if message sending fails
+            }
+        }
+
         usersProcessedCount++;
+        if (actionSuccessful) {
+            successfulUsersCount++; // Increment successful users count
+        }
+
+        // Update progress after processing each user
+        notificationHandler.notifyOngoing(successfulUsersCount, usersProcessedCount, usersToProcess.length);
+
+
+        // Small delay between users
+        await utils.sleep(500); // Assuming a small delay is appropriate
       }
 
-      const finalMessage = `Blocking titles completed. Successfully processed users: ${usersProcessedCount - failedUsersCount}, Failed users: ${failedUsersCount}, Total users processed: ${usersProcessedCount}. Simulated titles blocked: ${titlesBlockedCount}`;
+      // Final status update
+      const finalMessage = `Blocking titles completed. Successfully processed users: ${successfulUsersCount}, Failed users: ${failedUsersCount}, Total users processed: ${usersProcessedCount}. Simulated titles blocked: ${simulatedBlockedTitlesCount}.`;
       log.info("progctrl", finalMessage);
-      notificationHandler.notify(finalMessage);
+
+      if (this.earlyStop) {
+          notificationHandler.finishErrorEarlyStop(enums.BanSource.BLOCKED_MUTED_TITLES, enums.BanMode.BAN); // Use the new BanSource
+          // The notificationHandler.finishErrorEarlyStop function should handle displaying the final counts.
+      } else {
+          notificationHandler.finishSuccess(enums.BanSource.BLOCKED_MUTED_TITLES, enums.BanMode.BAN, successfulUsersCount, usersProcessedCount, usersToProcess.length); // Use the new BanSource
+      }
 
     } catch (error) {
       log.err("progctrl", `An error occurred during blocking titles: ${error}`, error);
-      notificationHandler.notify(`An error occurred during blocking titles: ${error.message}`);
+      // Use notify for error status, potentially including counts
+      notificationHandler.notify(`An error occurred during blocking titles: ${error.message}. Processed ${usersProcessedCount} users.`);
     } finally {
       log.info("progctrl", "blockTitlesOfBlockedMuted function completed.");
       this.earlyStop = false;
-      this._blockTitlesInProgress = false;
+      this._blockTitlesInProgress = false; // Reset flag
       // No specific display update needed for this operation currently
     }
   }

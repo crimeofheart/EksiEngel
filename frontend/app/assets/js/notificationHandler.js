@@ -169,7 +169,7 @@ class NotificationHandler
   }
 
   // --- Migration Specific Notifications ---
-  sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed) => {
+  sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed, simulatedBlockedCount) => {
     // Reusing existing fields where possible, adding migration-specific ones
     let message = {
       status: enums.NotificationType.MIGRATION_UPDATE,
@@ -181,6 +181,7 @@ class NotificationHandler
       plannedAction: total,           // Reusing for total items
       skippedCount: skipped,          // New field for skipped count
       failedCount: failed,            // New field for failed count
+      simulatedBlockedCount: simulatedBlockedCount, // New field for simulated blocked titles count
       // Unused fields from original #sendMessage set to default/null
       plannedProcesses: [],
       completedProcess: null,

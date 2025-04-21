@@ -4,7 +4,8 @@ export const BanSource = {
   FOLLOW:     "3",   /* Ban all authors that followed a specific author */
   LIST:       "4",   /* Ban/Undoban authors in the list that will be filled by user */
   UNDOBANALL: "5",   /* Undoban all banned authors */
-  TITLE:      "6"    /* Ban all authors that wrote a specific title */
+  TITLE:      "6",   /* Ban all authors that wrote a specific title */
+  BLOCKED_MUTED_TITLES: "7" /* Block titles of blocked and muted users */
 };
 
 export const BanMode = {
