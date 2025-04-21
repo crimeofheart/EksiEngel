@@ -136,8 +136,9 @@ function updateButtonStatus(message, isError = false, clearAfterMs = 3000) {
 /**
  * Generates a CSV file from the username list and triggers download.
  * @param {string[]} usernames - Array of usernames.
+ * @param {'muted' | 'blocked'} listType - The type of list being exported ('muted' or 'blocked').
  */
-function downloadCSV(usernames) {
+function downloadCSV(usernames, listType) {
   if (!Array.isArray(usernames) || usernames.length === 0) {
     updateButtonStatus("No usernames to export.", true);
     return;
@@ -150,13 +151,14 @@ function downloadCSV(usernames) {
   const link = document.createElement("a");
   link.setAttribute("href", url);
   const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  link.setAttribute("download", `eksiengel_muted_users_${timestamp}.csv`);
+  const filenamePrefix = listType === 'blocked' ? 'eksiengel_blocked_users' : 'eksiengel_muted_users';
+  link.setAttribute("download", `${filenamePrefix}_${timestamp}.csv`);
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  updateButtonStatus("Muted user list exported.", false);
+  updateButtonStatus(`${listType === 'blocked' ? 'Blocked' : 'Muted'} user list exported.`, false);
 }
 
 
@@ -249,7 +251,7 @@ async function handleExportMutedList() {
   try {
     const usernames = await storageHandler.getMutedUserList();
     if (usernames && usernames.length > 0) {
-      downloadCSV(usernames);
+      downloadCSV(usernames, 'muted');
     } else {
       updateButtonStatus("No muted user list found in storage to export.", true);
     }
@@ -293,10 +295,10 @@ async function handleExportBlockedList() {
   updateButtonStatus("Preparing export...", false, 0);
 
   try {
-    const usernames = await storageHandler.getBlockedUserList();
-    if (usernames && usernames.length > 0) {
-      // Reuse the existing downloadCSV function, but maybe update the filename
-      downloadCSV(usernames.map(user => user.username)); // Assuming blocked list stores objects with username property
+    const blockedUsernames = await storageHandler.getBlockedUserList();
+    if (blockedUsernames && blockedUsernames.length > 0) {
+      // The stored list is already an array of usernames (strings)
+      downloadCSV(blockedUsernames, 'blocked');
     } else {
       updateButtonStatus("No blocked user list found in storage to export.", true);
     }

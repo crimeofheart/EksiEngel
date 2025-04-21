@@ -41,8 +41,10 @@ function updateStatus(message, isError = false, clearAfterMs = 3000) {
 /**
  * Generates a CSV file from the username list and triggers download.
  * @param {string[]} usernames - Array of usernames.
+ * @param {'muted' | 'blocked'} listType - The type of list being exported ('muted' or 'blocked').
  */
-function downloadCSV(usernames) {
+function downloadCSV(usernames, listType) {
+  log.info("popup.js", `downloadCSV triggered. Usernames count: ${usernames ? usernames.length : 0}, listType: ${listType}`); // Added detailed logging
   if (!Array.isArray(usernames) || usernames.length === 0) {
     updateStatus("No usernames to export.", true);
     return;
@@ -55,13 +57,14 @@ function downloadCSV(usernames) {
   const link = document.createElement("a");
   link.setAttribute("href", url);
   const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  link.setAttribute("download", `eksiengel_muted_users_${timestamp}.csv`);
+  const filenamePrefix = listType === 'blocked' ? 'eksiengel_blocked_users' : 'eksiengel_muted_users';
+  link.setAttribute("download", `${filenamePrefix}_${timestamp}.csv`);
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  updateStatus("Muted user list exported.", false);
+  updateStatus(`${listType === 'blocked' ? 'Blocked' : 'Muted'} user list exported.`, false);
 }
 
 // --- Initialization ---
@@ -203,6 +206,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function handleExportMutedList() {
+  log.info("popup.js", "handleExportMutedList triggered."); // Added logging
   log.info("popup.js", "Export muted list button clicked.");
   commHandler.sendAnalyticsData({ click_type: enums.ClickType.EXTENSION_MENU_EXPORT_MUTED }); // Assuming new enum value
 
@@ -212,7 +216,7 @@ async function handleExportMutedList() {
   try {
     const usernames = await storageHandler.getMutedUserList();
     if (usernames && usernames.length > 0) {
-      downloadCSV(usernames);
+      downloadCSV(usernames, 'muted');
     } else {
       updateStatus("No muted user list found in storage to export.", true);
     }
@@ -252,6 +256,7 @@ function handleRefreshBlockedList() { // Added
 } // Added
 
 async function handleExportBlockedList() { // Added
+  log.info("popup.js", "handleExportBlockedList triggered."); // Added logging
   log.info("popup.js", "Export blocked list button clicked."); // Added
   // TODO: Add Analytics Data Point for blocked list export // Added
 
@@ -260,8 +265,9 @@ async function handleExportBlockedList() { // Added
 
   try { // Added
     const usernames = await storageHandler.getBlockedUserList(); // Added
+    log.info("popup.js", `handleExportBlockedList: Retrieved ${usernames ? usernames.length : 0} usernames. Calling downloadCSV with listType 'blocked'.`); // Added detailed logging
     if (usernames && usernames.length > 0) { // Added
-      downloadCSV(usernames); // Reuse the existing downloadCSV function // Added
+      downloadCSV(usernames, 'blocked'); // Reuse the existing downloadCSV function // Added
     } else { // Added
       updateStatus("No blocked user list found in storage to export.", true); // Added
     } // Added
