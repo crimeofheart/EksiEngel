@@ -24,6 +24,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
     "startMigration",
     "startTitleMigration",
     "refreshMutedList",
+    "refreshBlockedList", // Added
     "blockMutedUsers", // Added
     "blockTitlesOfBlockedMuted" // Added
   ];
@@ -133,6 +134,7 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
       // Send response immediately for this message type
       sendResponse({ status: 'ok', message: `${isTitleMigration ? "Title migration" : "Migration"} initiated` });
       return; // Don't process further as a standard ban/unban
+      return true; // Indicate asynchronous response
     } else if (message.action === "refreshMutedList") {
       log.info("bg", "Handling refreshMutedList request from popup.");
 
@@ -218,20 +220,108 @@ chrome.runtime.onMessage.addListener(async function messageListener_Popup(messag
         // Send a response to the popup (even if there was an error or early stop)
         sendResponse({ status: 'ok', message: 'Refresh initiated' });
       }
+      return true; // Indicate asynchronous response
+      return; // Stop further processing of this message
+    } else if (message.action === "refreshBlockedList") { // Added handler for blocked list refresh
+      log.info("bg", "Handling refreshBlockedList request from popup.");
+
+      // Check if a refresh process is already in progress (assuming a similar flag exists)
+      if (programController.isBlockedListRefreshInProgress) { // Assuming this flag exists
+        log.warn("bg", "Blocked list refresh is already in progress. Ignoring new request.");
+        // Optionally send a message back to the notification page to indicate this
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "blockedListRefreshComplete", // New action for blocked list completion
+          success: false,
+          error: "Blocked list refresh is already running."
+        });
+        sendResponse({ status: 'error', message: 'Refresh already in progress' });
+        return; // Stop here if already running
+      }
+
+      // Set the flag to indicate the process is starting
+      programController.isBlockedListRefreshInProgress = true; // Assuming this flag exists
+      // Reset early stop flag before starting a new process
+      programController.earlyStop = false;
+
+      // Define a function to send progress updates to the notification page
+      const updateProgress = async (progress) => {
+        // Send progress update to the notification page
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "blockedListRefreshProgress", // New action for real-time updates
+          count: progress.currentCount // Include the current count
+        });
+        // Save the current count to storage
+        await storageHandler.saveBlockedUserCount(progress.currentCount); // Use blocked user storage
+      };
+
+      // Call scrapeAllBlockedUsers with the progress callback (Assuming this function exists)
+      try {
+        const result = await scrapingHandler.scrapeAllBlockedUsers(updateProgress); // Assuming this function exists
+
+        if (result.success) {
+          await storageHandler.saveBlockedUserList(result.usernames); // Use blocked user storage
+          // Save the final count to storage
+          await storageHandler.saveBlockedUserCount(result.count); // Use blocked user storage
+          log.info("bg", `Successfully scraped and saved ${result.count} blocked users.`);
+          // Send final success message to notification page
+          chrome.tabs.sendMessage(g_notificationTabId, {
+            action: "blockedListRefreshComplete", // New action for blocked list completion
+            success: true,
+            count: result.count
+          });
+        } else {
+          // Check if the process was stopped early by the user
+          if (result.stoppedEarly) {
+            log.info("bg", "Blocked user scraping stopped by user.");
+            // Send a specific message to notification page for early stop
+            chrome.tabs.sendMessage(g_notificationTabId, {
+              action: "blockedListRefreshComplete", // New action for blocked list completion
+              success: false, // Still technically not a full success
+              stoppedEarly: true, // Indicate it was stopped early
+              count: result.count || 0, // Send current count if available
+              error: result.error || "Process stopped by user" // Provide a user-friendly message
+            });
+          } else {
+            // Handle actual errors during scraping
+            log.err("bg", "Error scraping blocked users:", result.error);
+            // Send error message to notification page
+            chrome.tabs.sendMessage(g_notificationTabId, {
+              action: "blockedListRefreshComplete", // New action for blocked list completion
+              success: false,
+              error: result.error
+            });
+          }
+        }
+      } catch (e) {
+        log.err("bg", `Unexpected error during refreshBlockedList: ${e}`);
+        chrome.tabs.sendMessage(g_notificationTabId, {
+          action: "blockedListRefreshComplete", // New action for blocked list completion
+          success: false,
+          error: e.message || "Unknown error"
+        });
+      } finally {
+        // Ensure the flag is reset when the process finishes (success, error, or early stop)
+        programController.isBlockedListRefreshInProgress = false; // Assuming this flag exists
+        // Send a response to the popup (even if there was an error or early stop)
+        sendResponse({ status: 'ok', message: 'Refresh initiated' });
+      }
+      return true; // Indicate asynchronous response
       return; // Stop further processing of this message
     } else if (message.action === "blockMutedUsers") {
       log.info("bg", "Handling blockMutedUsers request.");
       // Call programController function (implementation needed there)
       programController.blockMutedUsers();
       sendResponse({ status: 'ok', message: 'Block Muted Users process initiated' });
+      return true; // Indicate asynchronous response
       return;
     } else if (message.action === "blockTitlesOfBlockedMuted") {
       log.info("bg", "Handling blockTitlesOfBlockedMuted request.");
       // Call programController function (implementation needed there)
       programController.blockTitlesOfBlockedMuted();
       sendResponse({ status: 'ok', message: 'Block Titles of Blocked/Muted process initiated' });
+      return true; // Indicate asynchronous response
       return;
-    
+
     }
     // New handlers will be inserted here in the next step
   }

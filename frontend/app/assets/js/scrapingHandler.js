@@ -297,9 +297,28 @@ class ScrapingHandler
             'x-requested-with': 'XMLHttpRequest'
           }
       });
+      
+      // Check if the request was successful
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} ${response.statusText} for URL: ${targetUrl}`);
+      }
+
+      // Check content type before parsing JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        // Attempt to read the response as text to include in the error message
+        let responseBody = "";
+        try {
+          responseBody = await response.text();
+        } catch (textError) {
+          responseBody = "(Could not read response body)";
+        }
+        throw new Error(`Expected JSON, but received Content-Type: ${contentType}. Response body: ${responseBody.substring(0, 100)}...`);
+      }
+
       responseJson = await response.json();
       let isLast = responseJson.Relations.IsLast;
-      
+
       let authorNameList = [];
       let authorIdList = [];
       let authorNumber = responseJson.Relations.Items.length;
@@ -315,10 +334,12 @@ class ScrapingHandler
     }
     catch(err)
     {
-      log.err("scraping", "scrapeAuthorNamesFromBannedAuthorPagePartially: " + err);
-      return {authorIdList: [], authorNameList: [], isLast: true};
+      // Log the error and re-throw it to ensure the caller knows about the failure
+      log.err("scraping", `#scrapeAuthorNamesFromBannedAuthorPagePartially failed for page ${index}, type ${targetTypeTextInURL}: ${err}`);
+      // Re-throw the original error or a new one with more context
+      throw new Error(`Failed to scrape page ${index} for type ${targetTypeTextInURL}: ${err.message || err}`);
     }
-    
+
   }
   
   // Simplified version that only fetches the first page of blocked users
@@ -606,6 +627,75 @@ class ScrapingHandler
     } catch (err) {
       log.err("scraping", `Error scraping all muted users: ${err.message || err}`);
       return { success: false, error: err.message || 'Unknown error during scraping' };
+    }
+  }
+
+  // Scrapes all pages of blocked users
+  async scrapeAllBlockedUsers(progressCallback) {
+    log.info("scraping", "Starting to scrape all blocked users...");
+    let scrapedUsernames = [];
+    let scrapedUserIds = []; // Keep track of IDs if needed
+    let isLast = false;
+    let index = 0;
+    let totalCount = 0;
+
+    try {
+      while (!isLast) {
+        // Check for early stop request before fetching the next page
+        if (programController.earlyStop) {
+          log.info("scraping", "Blocked user scraping stopped early by user request.");
+          // Return the count found so far
+          return { success: false, usernames: scrapedUsernames, count: totalCount, stoppedEarly: true, error: "Process stopped by user" };
+        }
+
+        index++;
+        log.info("scraping", `Fetching page ${index} of blocked users...`);
+        let partialListObj;
+        try {
+          // Use USER target type
+          partialListObj = await this.#scrapeAuthorNamesFromBannedAuthorPagePartially(enums.TargetType.USER, index);
+        } catch (pageError) {
+          log.err("scraping", `Error fetching page ${index} of blocked users: ${pageError}`);
+          // Stop on page error, return count found so far
+          throw new Error(`Failed to fetch page ${index} of blocked users: ${pageError.message || pageError}`);
+        }
+
+        const partialNameList = partialListObj.authorNameList;
+        const partialIdList = partialListObj.authorIdList;
+        isLast = partialListObj.isLast;
+
+        scrapedUsernames.push(...partialNameList);
+        scrapedUserIds.push(...partialIdList); // Store IDs if needed later
+        totalCount += partialNameList.length;
+
+        log.info("scraping", `Found ${partialNameList.length} blocked users on page ${index}. Total found: ${totalCount}`);
+
+        // Call the progress callback if provided
+        if (progressCallback && typeof progressCallback === 'function') {
+          try {
+            // Pass the current total count
+            await progressCallback({ currentCount: totalCount });
+          } catch (callbackError) {
+            log.warn("scraping", `Error in progress callback for blocked users: ${callbackError}`);
+            // Continue even if callback fails
+          }
+        }
+
+        // Optional delay can be added here if needed: await utils.delay(config.scrapeDelayMs);
+      }
+
+      log.info("scraping", `Successfully scraped all ${totalCount} blocked users.`);
+      return { success: true, usernames: scrapedUsernames, count: totalCount };
+
+    } catch (err) {
+      log.err("scraping", `Error during scrapeAllBlockedUsers: ${err}`);
+      // Check if it was an early stop triggered by an error within the loop/page fetch
+      if (programController.earlyStop) {
+         // Return count found so far
+         return { success: false, usernames: scrapedUsernames, count: totalCount, stoppedEarly: true, error: err.message || "Process stopped due to error" };
+      }
+      // Return count found so far even on other errors
+      return { success: false, usernames: scrapedUsernames, count: totalCount, error: err.message || "Unknown error during scraping" };
     }
   }
 

@@ -4,6 +4,12 @@ import { commHandler } from './commHandler.js'; // Import commHandler
 import { storageHandler } from './storageHandler.js'; // Import storageHandler
 
 // --- Element References ---
+let mutedUserCountSpan; // Added
+let blockedUserCountSpan; // Added
+let refreshMutedListButton; // Added
+let exportMutedListCSVButton; // Added
+let refreshBlockedListButton; // Added
+let exportBlockedListCSVButton; // Added
 let buttonStatusDiv; // Dedicated status div for button actions
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -75,6 +81,33 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   loadMutedUserCount();
+
+  // Load and display the initial blocked user count from storage // Added
+  async function loadBlockedUserCount() { // Added
+    const blockedUserCount = await storageHandler.getBlockedUserCount(); // Added
+    const blockedUserCountSpan = document.getElementById("blockedUserCount"); // Added
+    if (blockedUserCountSpan) { // Added
+      blockedUserCountSpan.textContent = blockedUserCount; // Added
+    } // Added
+  } // Added
+
+  loadBlockedUserCount(); // Added
+
+  // Get element references for buttons and counts // Added
+  mutedUserCountSpan = document.getElementById('mutedUserCount'); // Added
+  refreshMutedListButton = document.getElementById('refreshMutedList'); // Added
+  exportMutedListCSVButton = document.getElementById('exportMutedListCSV'); // Added
+  blockedUserCountSpan = document.getElementById('blockedUserCount'); // Added
+  refreshBlockedListButton = document.getElementById('refreshBlockedList'); // Added
+  exportBlockedListCSVButton = document.getElementById('exportBlockedListCSV'); // Added
+
+  // Add event listeners for the new buttons // Added
+  if (refreshBlockedListButton) { // Added
+    refreshBlockedListButton.addEventListener('click', handleRefreshBlockedList); // Added
+  } // Added
+  if (exportBlockedListCSVButton) { // Added
+    exportBlockedListCSVButton.addEventListener('click', handleExportBlockedList); // Added
+  } // Added
 });
 
 // --- Helper Functions for Buttons ---
@@ -229,6 +262,54 @@ async function handleExportMutedList() {
     if (exportButton) exportButton.disabled = false; // Re-enable regardless of success/failure
   }
 }
+
+async function handleRefreshBlockedList() {
+  console.log("notification.js", "Refresh blocked list button clicked.");
+  // TODO: Add Analytics Data Point for blocked list refresh
+
+  updateButtonStatus("Initiating blocked list refresh...", false, 0);
+
+  // Send message to background script to handle the refresh process
+  chrome.runtime.sendMessage({ action: "refreshBlockedList" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error("notification.js: Error sending refreshBlockedList message:", chrome.runtime.lastError.message);
+      updateButtonStatus("Error initiating refresh: " + chrome.runtime.lastError.message, true, 5000);
+      // Re-enable buttons if message sending fails
+      if (refreshBlockedListButton) refreshBlockedListButton.disabled = false;
+      const currentCount = parseInt(blockedUserCountSpan.textContent) || 0;
+      if (exportBlockedListCSVButton) exportBlockedListCSVButton.disabled = currentCount === 0;
+    } else {
+      console.log("notification.js: refreshBlockedList message sent successfully. Waiting for completion message.");
+      // Background script will handle progress and send updates
+    }
+  });
+}
+
+async function handleExportBlockedList() {
+  console.log("notification.js", "Export blocked list button clicked.");
+  // TODO: Add Analytics Data Point for blocked list export
+
+  if (exportBlockedListCSVButton) exportBlockedListCSVButton.disabled = true; // Disable while processing
+  updateButtonStatus("Preparing export...", false, 0);
+
+  try {
+    const usernames = await storageHandler.getBlockedUserList();
+    if (usernames && usernames.length > 0) {
+      // Reuse the existing downloadCSV function, but maybe update the filename
+      downloadCSV(usernames.map(user => user.username)); // Assuming blocked list stores objects with username property
+    } else {
+      updateButtonStatus("No blocked user list found in storage to export.", true);
+    }
+  } catch (error) {
+    console.error("notification.js", "Error exporting blocked list:", error);
+    updateButtonStatus(`Error exporting: ${error.message || 'Unknown error'}`, true);
+  } finally {
+    // Re-enable based on current count
+    const currentCount = parseInt(blockedUserCountSpan.textContent) || 0;
+    if (exportBlockedListCSVButton) exportBlockedListCSVButton.disabled = currentCount === 0;
+  }
+}
+
 
 
 function handleBlockMutedUsers() {
@@ -392,6 +473,45 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     sendResponse({ status: "ok" });
     return true;
   }
+
+  // Handle blocked list refresh complete (new logic)
+  if (message && message.action === "blockedListRefreshComplete") {
+    console.log(`Blocked list refresh complete: Success=${message.success}, StoppedEarly=${message.stoppedEarly}, Count=${message.count}, Error=${message.error}`);
+
+    // Update the displayed count
+    if (blockedUserCountSpan) {
+      blockedUserCountSpan.textContent = message.count;
+    }
+
+    // Re-enable the buttons
+    if (refreshBlockedListButton) refreshBlockedListButton.disabled = false;
+    if (exportBlockedListCSVButton) exportBlockedListCSVButton.disabled = message.count === 0;
+
+    // Update button status area
+    if (message.success) {
+      updateButtonStatus(`Blocked list refreshed. Found ${message.count} users.`, false, 5000);
+    } else {
+      const errorMessage = message.stoppedEarly ? "Blocked list refresh stopped by user." : `Blocked list refresh failed: ${message.error}`;
+      updateButtonStatus(errorMessage, true, 5000);
+    }
+
+    sendResponse({ status: "ok" });
+    return true; // Keep the message channel open for the async response
+  }
+
+  // Handle blocked list refresh progress (new logic)
+  if (message && message.action === "blockedListRefreshProgress") {
+    console.log(`Received blocked list refresh progress: Count ${message.count}`);
+    // Update the displayed count
+    if (blockedUserCountSpan) {
+      blockedUserCountSpan.textContent = message.count;
+    }
+    // Keep export button disabled during refresh
+    if (exportBlockedListCSVButton) exportBlockedListCSVButton.disabled = true;
+    sendResponse({ status: "ok" });
+    return true; // Keep the message channel open for the async response
+  }
+
 
   // --- Handle General Notifications from Background ---
   if (message && message.notification) {
