@@ -870,6 +870,171 @@ async function processHandler(banSource, banMode, entryUrl, singleAuthorName, si
       notificationHandler.notifyOngoing(res.successfulAction, res.performedAction, scrapedRelations.size);
     }
   }
+  else if (banSource === enums.BanSource.UNDOBANALL) {
+      log.info("bg", "Handling UNDOBANALL request.");
+      notificationHandler.notify("Tüm engeller ve sessize almalar kaldırılıyor...");
+
+      let totalProcessed = 0;
+      let totalSuccessful = 0;
+      let totalFailed = 0;
+      let totalPlanned = 0;
+
+      // --- Process Blocked Users ---
+      notificationHandler.notify("Engellenen kullanıcılar alınıyor...");
+      const blockedUsersResult = await scrapingHandler.scrapeAllBlockedUsers();
+
+      if (blockedUsersResult.success && blockedUsersResult.usernames.length > 0) {
+          const blockedUsers = blockedUsersResult.usernames.map(username => ({ authorName: username, authorId: null }));
+          totalPlanned += blockedUsers.length;
+          notificationHandler.notify(`Engellenen ${blockedUsers.length} kullanıcı bulundu. Engeller kaldırılıyor...`);
+          notificationHandler.notifyOngoing(totalSuccessful, totalProcessed, totalPlanned);
+
+          for (let i = 0; i < blockedUsers.length; i++) {
+              if (programController.earlyStop) break;
+
+              const user = blockedUsers[i];
+              notificationHandler.notifyStatus(`Engel kaldırılıyor: ${user.authorName} (${totalProcessed + 1}/${totalPlanned})`);
+
+              // Scrape ID
+              const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
+              if (!authorId || authorId === "0") {
+                  log.err("bg", `Could not scrape user ID for ${user.authorName}. Skipping unblock.`);
+                  totalFailed++;
+                  totalProcessed++;
+                  notificationHandler.notifyStatus(`ID alınamadı, engel kaldırılamadı: ${user.authorName}`);
+                  continue;
+              }
+
+              // Perform Unblock Action (User)
+              const unblockUserResult = await programController._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, true, false, false);
+
+              if (unblockUserResult.earlyStop) break;
+
+              if (unblockUserResult.resultType === enums.ResultType.SUCCESS) {
+                  log.info("bg", `Successfully unblocked user: ${user.authorName}`);
+                  totalSuccessful++;
+                  // No need to remove from blocked list storage, as it's refreshed on demand
+              } else {
+                  log.err("bg", `Failed to unblock user: ${user.authorName}`);
+                  totalFailed++;
+              }
+              totalProcessed++;
+              notificationHandler.notifyOngoing(totalSuccessful, totalProcessed, totalPlanned);
+              await utils.sleep(500); // Small delay
+          }
+      } else if (!blockedUsersResult.success) {
+          log.err("bg", `Failed to fetch blocked users: ${blockedUsersResult.error}`);
+          notificationHandler.notify(`Engellenen kullanıcılar alınamadı: ${blockedUsersResult.error}`);
+          totalFailed += blockedUsersResult.count || 0; // Add any partially scraped count to failed
+      } else {
+          log.info("bg", "No blocked users found to unblock.");
+          notificationHandler.notify("Engellenen kullanıcı bulunamadı.");
+      }
+
+      // Check for early stop before processing muted users
+      if (programController.earlyStop) {
+          log.info("bg", "Operation stopped early after processing blocked users.");
+          notificationHandler.notify("İşlem kullanıcı tarafından durduruldu.");
+          // Final notification will be handled after the try/catch/finally block
+      } else {
+          // --- Process Muted Users ---
+          notificationHandler.notify("Sessize alınan kullanıcılar alınıyor...");
+          const mutedUsersResult = await scrapingHandler.scrapeAllMutedUsers(); // Assuming this exists and works like scrapeAllBlockedUsers
+
+          if (mutedUsersResult.success && mutedUsersResult.usernames.length > 0) {
+              const mutedUsers = mutedUsersResult.usernames.map(username => ({ authorName: username, authorId: null }));
+              totalPlanned += mutedUsers.length; // Add to total planned
+              notificationHandler.notify(`Sessize alınan ${mutedUsers.length} kullanıcı bulundu. Sessize almalar kaldırılıyor...`);
+              notificationHandler.notifyOngoing(totalSuccessful, totalProcessed, totalPlanned); // Update progress with new total planned
+
+              for (let i = 0; i < mutedUsers.length; i++) {
+                  if (programController.earlyStop) break;
+
+                  const user = mutedUsers[i];
+                  notificationHandler.notifyStatus(`Sessize alma kaldırılıyor: ${user.authorName} (${totalProcessed + 1}/${totalPlanned})`);
+
+                  // Scrape ID
+                  const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
+                  if (!authorId || authorId === "0") {
+                      log.err("bg", `Could not scrape user ID for ${user.authorName}. Skipping unmute.`);
+                      totalFailed++;
+                      totalProcessed++;
+                      notificationHandler.notifyStatus(`ID alınamadı, sessize alma kaldırılamadı: ${user.authorName}`);
+                      continue;
+                  }
+
+                  // Perform Unmute Action (Mute)
+                  const unmuteResult = await programController._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, false, false, true);
+
+                  if (unmuteResult.earlyStop) break;
+
+                  if (unmuteResult.resultType === enums.ResultType.SUCCESS) {
+                      log.info("bg", `Successfully unmuted user: ${user.authorName}`);
+                      totalSuccessful++;
+                      // Need to remove from muted list storage
+                      // This will be handled after the loop
+                  } else {
+                      log.err("bg", `Failed to unmute user: ${user.authorName}`);
+                      totalFailed++;
+                  }
+                  totalProcessed++;
+                  notificationHandler.notifyOngoing(totalSuccessful, totalProcessed, totalPlanned);
+                  await utils.sleep(500); // Small delay
+              }
+
+              // Update muted user list in storage after processing
+              if (!programController.earlyStop) {
+                   // If not stopped early, the muted list should now be empty
+                   await storageHandler.saveMutedUserList([]);
+                   await storageHandler.saveMutedUserCount(0);
+                   log.info("bg", "Cleared muted user list in storage.");
+              } else {
+                   // If stopped early, the muted list in storage is no longer accurate.
+                   // It's safer to clear it or mark it as needing refresh.
+                   // Clearing seems simpler for now.
+                   await storageHandler.saveMutedUserList([]);
+                   await storageHandler.saveMutedUserCount(0);
+                   log.info("bg", "Cleared muted user list in storage due to early stop.");
+              }
+
+
+          } else if (!mutedUsersResult.success) {
+              log.err("bg", `Failed to fetch muted users: ${mutedUsersResult.error}`);
+              notificationHandler.notify(`Sessize alınan kullanıcılar alınamadı: ${mutedUsersResult.error}`);
+               totalFailed += mutedUsersResult.count || 0; // Add any partially scraped count to failed
+          } else {
+              log.info("bg", "No muted users found to unmute.");
+              notificationHandler.notify("Sessize alınan kullanıcı bulunamadı.");
+          }
+      }
+
+
+      // Final status update
+      if (programController.earlyStop) {
+          notificationHandler.finishErrorEarlyStop(banSource, banMode);
+          log.info("bg", `Program has been finished (early stop. Successful: ${totalSuccessful}, Performed: ${totalProcessed}, Planned: ${totalPlanned})`);
+      } else {
+          notificationHandler.finishSuccess(banSource, banMode, totalSuccessful, totalProcessed, totalPlanned);
+          log.info("bg", `Program has been finished (successfull: ${totalSuccessful}, performed: ${totalProcessed}, planned: ${totalPlanned})`);
+      }
+
+      // Clear blocked user list in storage after processing
+      // This is important because the list is now empty on the server side
+      if (!programController.earlyStop) {
+          await storageHandler.saveBlockedUserList([]);
+          await storageHandler.saveBlockedUserCount(0);
+          log.info("bg", "Cleared blocked user list in storage.");
+      } else {
+          // If stopped early, the blocked list in storage is no longer accurate.
+          // Clearing seems simpler for now.
+          await storageHandler.saveBlockedUserList([]);
+          await storageHandler.saveBlockedUserCount(0);
+          log.info("bg", "Cleared blocked user list in storage due to early stop.");
+      }
+
+
+      // The rest of the processHandler logic (sending analytics, clearing flags) will run after this block.
+  }
 
   let successfulAction = relationHandler.successfulAction;
   let performedAction = relationHandler.performedAction;
