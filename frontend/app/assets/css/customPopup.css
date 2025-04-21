@@ -1,46 +1,49 @@
 /* Styles for the popup.html */
 
 body {
-  width: 380px; /* Adjust body width for better layout */
+  width: 350px; /* Reduced body width */
   font-family: sans-serif; /* Basic font */
+  padding: 5px; /* Added padding to body */
+  box-sizing: border-box; /* Include padding in width */
 }
 
 #title {
   text-align: center;
   font-family: 'Montserrat', sans-serif;
-  font-size: 22px; /* Slightly reduced font size */
-  margin-bottom: 3px; /* Reduced margin */
+  font-size: 20px; /* Further reduced font size */
+  margin-bottom: 5px; /* Adjusted margin */
+  margin-top: 0; /* Remove top margin */
 }
 
 img {
   display: block;
-  margin: 0 auto 5px auto; /* Reduced bottom margin */
-  height: 64px; /* Set a fixed height for the image */
-  width: 64px; /* Set a fixed width for the image */
+  margin: 0 auto 8px auto; /* Adjusted margin */
+  height: 48px; /* Reduced image size */
+  width: 48px; /* Reduced image size */
 }
 
 .button-section {
-  margin-bottom: 5px; /* Reduced space between button groups */
+  margin-bottom: 8px; /* Adjusted space between button groups */
   text-align: center; /* Center buttons within the section */
 }
 
 .button-section button.btn-green-candy {
-  /* Removed display: block for flexbox compatibility */
-  /* Removed width: 100% for flexbox compatibility */
   margin: 2px 0; /* Keep vertical margin, remove auto for horizontal */
-  padding: 8px !important; /* Adjust padding */
+  padding: 6px 10px !important; /* Reduced padding */
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px; /* Reduced font size */
   border-radius: 4px;
   transition: background-color 0.2s ease;
-  /* Applied desired styles with higher specificity */
   background-color: #4CAF50; /* Green */
   color: #000000; /* Black */
   border: 1px solid #388E3C; /* Dark Green */
+  width: 100%; /* Make buttons fill the width */
+  box-sizing: border-box; /* Include padding and border in width */
+  text-align: center; /* Ensure text is centered */
+  display: block; /* Ensure block display for full width */
 }
 
 .button-section button.btn-green-candy:hover {
-  /* Maintain desired styles on hover */
   background-color: #45a049 !important; /* Darker Green */
   color: #000000 !important; /* Black */
   border: 1px solid #388E3C !important; /* Dark Green */
@@ -48,9 +51,23 @@ img {
 
 .button-group {
   display: flex; /* Use flexbox for side-by-side buttons */
-  /* Removed justify-content: space-between to allow equal width distribution */
-  /* Removed align-items: center to allow stretching */
   gap: 5px; /* Add a small gap between buttons */
+  width: 100%; /* Ensure button group takes full width */
+  box-sizing: border-box; /* Include padding and border in width */
+}
+
+.button-group button {
+  flex-grow: 1; /* Make buttons grow to fill available space equally */
+  margin: 0; /* Remove margin set for block buttons */
+  padding: 6px 10px !important; /* Reduced padding */
+  font-size: 13px; /* Reduced font size */
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  text-align: center; /* Ensure text is centered */
+  display: flex; /* Use flexbox to center text vertically */
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2em; /* Added line height for consistent text spacing */
+  height: auto; /* Remove fixed height */
 }
 
 /* Ensure green styling for target buttons with maximum specificity in popup.html */
@@ -60,20 +77,6 @@ img {
     border: 1px solid #388E3C; /* Dark Green */
 }
 
-/* Custom styles for specific buttons in popup.html to make them slightly smaller */
-#btnBlockMutedUsers,
-#btnBlockTitlesOfBlockedMuted {
-  padding: 6px 12px !important; /* Reduced padding */
-  font-size: 14px; /* Adjusted for consistent font size */
-
-#btnUnblockAndMute,
-#btnBlockMutedUsers {
-  padding: 8px !important; /* Ensure consistent padding for equal size */
-  flex-grow: 1; /* Make buttons grow to fill available space equally */
-  /* Removed width: 48% as flex-grow handles width */
-  box-sizing: border-box; /* Include padding and border in the element's total width and height */
-}
-
 .button-section button.btn.btn-dark.btn-green-candy:hover,
 .button-section button.btn.btn-dark.btn-green-candy:active {
     background-color: #4CAF50; /* Green */
@@ -81,51 +84,40 @@ img {
     border: 1px solid #388E3C; /* Dark Green */
 }
 
-.button-group button {
-  /* display: inline-block; Removed as flex items are block-like */
-  /* width: 48%; Removed as flex-grow handles width */
-  margin: 0; /* Remove margin set for block buttons */
-  padding: 8px !important; /* Ensure consistent padding */
-}
-.button-group button.btn-green-candy {
-  display: initial; /* Override display: block from general button styles */
-  width: initial; /* Override width: 100% from general button styles */
-}
-
-#mutedInfo {
+#mutedInfo,
+#blockedInfo {
     text-align: center;
-    margin-bottom: 3px; /* Reduced space below muted user count */
-    font-size: 0.9em; /* Slightly reduced font size */
+    margin-bottom: 3px; /* Reduced space below user count */
+    font-size: 0.8em; /* Further reduced font size */
     color: #333;
 }
 
 #popupStatus {
   text-align: center;
   margin-top: 5px; /* Reduced space above status */
-  height: 1.2em; /* Reduced height for status message */
-  font-size: 0.9em; /* Reduced font size */
+  height: 1em; /* Reduced height for status message */
+  font-size: 0.8em; /* Reduced font size */
   color: #333;
-  min-height: 1.2em; /* Ensure minimum height even when empty */
+  min-height: 1em; /* Ensure minimum height even when empty */
 }
 
 .btn-green-candy {
     cursor: pointer;
     text-decoration: none;
-    padding: 8px 18px; /* Keep existing custom padding */
-    font-size: 12px; /* From .btn */
-    line-height: 19px; /* From .btn */
+    padding: 6px 10px; /* Reduced padding */
+    font-size: 13px; /* Reduced font size */
+    line-height: 1.2em; /* Adjusted line height */
     text-transform: uppercase; /* From .btn */
     font-family: 'Montserrat', sans-serif; /* From .btn */
     font-weight: 400; /* From .btn */
-    letter-spacing: 3px; /* From .btn */
+    letter-spacing: 2px; /* Reduced letter spacing */
     transition: all .4s ease-in-out; /* From .btn */
-    /* New styles */
     background-color: #4CAF50; /* Green */
     color: #000000; /* Black */
     border: 1px solid #388E3C; /* Dark Green */
-    /* Keep existing styles that don't conflict */
     border-radius: 3px; /* From .switch-candy a */
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.45); /* From .switch-candy a */
+    box-sizing: border-box; /* Include padding and border in width */
 }
 
 .equal-width-buttons button {
@@ -136,9 +128,22 @@ img {
   justify-content: center;
   text-align: center; /* Ensure text is centered */
   box-sizing: border-box; /* Include padding and border in the element's total width and height */
-  height: 75px; /* Explicitly set height to ensure equal size */
+  height: auto; /* Removed fixed height */
 }
 .button-group.equal-width-buttons {
   align-items: stretch; /* Make flex items (buttons) stretch to fill the container height */
 }
+
+/* Specific adjustments for buttons that might have longer text */
+#openauthorListPage,
+#startUndobanAll,
+#btnBlockTitlesOfBlockedMuted,
+#migrateBlockedTitlesToUnblocked {
+    word-break: break-word; /* Allow long words to break */
+    white-space: normal; /* Allow text wrapping */
+}
+
+/* Ensure buttons within button-group take equal width */
+.button-group button {
+    flex-basis: 0; /* Allow items to shrink below their content size */
 }
