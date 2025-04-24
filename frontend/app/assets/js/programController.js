@@ -759,7 +759,7 @@ class ProgramController
     this.earlyStop = false;
 
     try {
-      notificationHandler.notify("Engellenen başlıkları olan kullanıcıların listesi getiriliyor...");
+      notificationHandler.notify("Başlıkları engellenen kullanıcıların listesi getiriliyor...");
 
       const scrapeResult = await scrapingHandler.scrapeAllUsersWithBlockedTitles(
         (progress) => {
@@ -770,7 +770,7 @@ class ProgramController
 
       if (!scrapeResult.success) {
         log.err("progctrl", `Failed to fetch list of users with blocked titles: ${scrapeResult.error}`);
-        notificationHandler.notify(`Engellenen başlıkları olan kullanıcıların listesi getirilemedi: ${scrapeResult.error}`);
+        notificationHandler.notify(`Başlıkları engellenen kullanıcıların listesi getirilemedi: ${scrapeResult.error}`);
         return;
       }
 
@@ -779,11 +779,11 @@ class ProgramController
 
       if (usersWithBlockedTitles.length === 0) {
         log.info("progctrl", "No users with blocked titles found.");
-        notificationHandler.notify("Engellenen başlıkları olan kullanıcı bulunamadı.");
+        notificationHandler.notify("Başlıkları engellenen kullanıcı bulunamadı.");
         return;
       }
 log.info("progctrl", `Successfully fetched list of ${totalCount} users with blocked titles. Starting unblocking process...`);
-notificationHandler.notify(`${totalCount} adet engellenen başlığı olan kullanıcı bulundu. Engel kaldırma işlemi başlatılıyor...`);
+notificationHandler.notify(`${totalCount} adet başlıkları engellenen kullanıcı bulundu. Engel kaldırma işlemi başlatılıyor...`);
 
 
 
