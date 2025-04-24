@@ -248,23 +248,17 @@ class ProgramController
         const percentage = Math.round((currentProgress / totalUsers) * 100);
 
         // Update progress bar in notification page using notifyOngoing
+        // Use migratedCount for successful actions, currentProgress for processed, totalUsers for total
         notificationHandler.notifyOngoing(migratedCount, currentProgress, totalUsers);
-
-        // Send status update: Processing current user
-        notificationHandler.notify(`İşleniyor: ${user.authorName} (${currentProgress}/${totalUsers})`);
-
 
         // Step A: Get the user ID by scraping their profile page
         log.info("progctrl", `Scraping user ID for: ${user.authorName}...`);
-        // Send status update: Scraping ID
-        notificationHandler.notify(`ID alınıyor: ${user.authorName}`);
         const authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(user.authorName);
 
         if (!authorId || authorId === "0") {
           log.err("progctrl", `Could not scrape user ID for ${user.authorName}. Skipping.`);
           failedCount++;
-          // Send status update: Failed to get ID
-          notificationHandler.notify(`ID alınamadı, atlanıyor: ${user.authorName}`);
+          // No specific notification here, failure is counted and loop continues
           continue; // Skip to the next user
         }
 
@@ -272,8 +266,6 @@ class ProgramController
 
         // Step B: Unblock
         log.info("progctrl", `Unblocking user: ${user.authorName} (ID: ${authorId})...`);
-        // Send status update: Unblocking
-        notificationHandler.notify(`Engel kaldırılıyor: ${user.authorName}`);
         const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, true, false, false);
 
         // Check if early stop was triggered during the retry
@@ -285,8 +277,7 @@ class ProgramController
         if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to unblock user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
-          // Send status update: Unblock failed
-          notificationHandler.notify(`Engel kaldırılamadı, atlanıyor: ${user.authorName}`);
+          // No specific notification here, failure is counted and loop continues
           continue; // Skip to the next user if unblock fails
         }
 
@@ -295,8 +286,6 @@ class ProgramController
         log.debug("progctrl", `Proceeding with muting regardless of config.enableMute setting`);
 
         log.info("progctrl", `Muting user: ${user.authorName} (ID: ${authorId})...`);
-        // Send status update: Muting
-        notificationHandler.notify(`Sessize alınıyor: ${user.authorName}`);
         const muteResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, false, false, true);
 
         // Check if early stop was triggered during the retry
@@ -308,13 +297,11 @@ class ProgramController
         if (muteResult.resultType !== enums.ResultType.SUCCESS) {
           log.err("progctrl", `Failed to mute user: ${user.authorName} (ID: ${authorId})`);
           failedCount++;
-          // Send status update: Mute failed
-          notificationHandler.notify(`Sessize alınamadı: ${user.authorName}`);
+          // No specific notification here, failure is counted
         } else {
           log.info("progctrl", `Successfully migrated user: ${user.authorName} (ID: ${authorId})`);
           migratedCount++;
-          // Send status update: Successfully migrated
-          notificationHandler.notify(`Başarıyla sessize alındı: ${user.authorName}`);
+          // Success is counted, notifyOngoing will reflect this in the next iteration
         }
 
         // Small delay between users
@@ -326,22 +313,30 @@ class ProgramController
       // The logic for usersToRemoveFromMuted and updating muted storage was incorrectly
       // copied from blockMutedUsers. Removing it here.
 
-      const finalMessage = `Taşıma tamamlandı. Başarıyla taşınan: ${migratedCount}, Başarısız: ${failedCount}, Toplam işlenen: ${migratedCount + failedCount}`;
-      log.info("progctrl", finalMessage);
-      // Use notify for final completion status
-      notificationHandler.notify(finalMessage);
+      // Final status update using finishSuccess or finishErrorEarlyStop
+      const totalProcessed = migratedCount + failedCount + skippedCount; // Calculate total processed
+      if (this.earlyStop) {
+          log.info("progctrl", `Migration stopped early. Migrated: ${migratedCount}, Failed: ${failedCount}, Skipped: ${skippedCount}, Total Processed: ${totalProcessed}`);
+          notificationHandler.finishErrorEarlyStop(enums.BanSource.MIGRATE_BLOCKED_TO_MUTED, enums.BanMode.BAN, migratedCount, totalProcessed, blockedUsers.length); // Assuming BAN mode for the final mute action
+      } else {
+          const finalMessage = `Taşıma tamamlandı. Başarıyla taşınan: ${migratedCount}, Başarısız: ${failedCount}, Atlanan: ${skippedCount}, Toplam işlenen: ${totalProcessed}`;
+          log.info("progctrl", finalMessage);
+          notificationHandler.finishSuccess(enums.BanSource.MIGRATE_BLOCKED_TO_MUTED, enums.BanMode.BAN, migratedCount, totalProcessed, blockedUsers.length); // Assuming BAN mode for the final mute action
+      }
 
 
     } catch (error) {
       log.err("progctrl", `An error occurred during migration: ${error}`, error);
-      // Use notify for error status
+      // Use notify for general error status before finally block
       notificationHandler.notify(`Taşıma sırasında bir hata oluştu: ${error.message || "Bilinmeyen hata"}`);
+      // Consider adding a finishError call here if appropriate, depending on desired final state display
     } finally {
       log.info("progctrl", "migrateBlockedToMuted function completed.");
-      this.earlyStop = false;
-      this._migrationInProgress = false;
-      // No specific display update needed for this operation currently,
-      // as the notification page handles the final status display.
+      this.earlyStop = false; // Reset early stop flag in finally
+      this._migrationInProgress = false; // Reset migration flag in finally
+      // Refresh relevant counts if needed
+      notificationHandler.updateMutedUserCountDisplay();
+      notificationHandler.updateBlockedUserCountDisplay();
     }
   }
 
@@ -420,10 +415,9 @@ class ProgramController
               const authorIdFromPage = pageUserIds[i]; // Get ID from the partial scrape result
               processedCount++;
 
-              // Update progress for the main processing loop
-              // Use totalUsersFound for the planned action count
+              // Update progress bar using notifyOngoing
+              // Use unmutedCount for successful actions, processedCount for processed, totalUsersFound for total
               notificationHandler.notifyOngoing(unmutedCount, processedCount, totalUsersFound);
-              notificationHandler.notify(`Kullanıcı işleniyor ${processedCount}/${totalUsersFound}: ${username}`);
 
               log.info("progctrl", `Processing user: ${username}...`);
 
@@ -431,7 +425,6 @@ class ProgramController
               let authorId = authorIdFromPage;
               if (!authorId || authorId === "0") {
                  log.info("progctrl", `Scraping user ID for: ${username}...`);
-                 notificationHandler.notify(`ID alınıyor: ${username}`);
                  authorId = await scrapingHandler.scrapeAuthorIdFromAuthorProfilePage(username);
               }
 
@@ -439,7 +432,7 @@ class ProgramController
               if (!authorId || authorId === "0") {
                 log.err("progctrl", `Could not get user ID for ${username}. Skipping.`);
                 failedCount++;
-                notificationHandler.notify(`ID alınamadı, atlanıyor: ${username}`);
+                // No specific notification, failure counted
                 continue; // Skip to the next user
               }
 
@@ -447,7 +440,6 @@ class ProgramController
 
               // Step B: Block the user
               log.info("progctrl", `Blocking user: ${username} (ID: ${authorId})...`);
-              notificationHandler.notify(`Engelleniyor: ${username}`);
               const blockResult = await this._performActionWithRetry(enums.BanMode.BAN, authorId, true, false, false);
 
               // Check if early stop was triggered during the retry
@@ -459,18 +451,17 @@ class ProgramController
               if (blockResult.resultType !== enums.ResultType.SUCCESS) {
                 log.err("progctrl", `Failed to block user: ${username} (ID: ${authorId})`);
                 failedCount++;
-                notificationHandler.notify(`Engellenemedi: ${username}`);
+                // No specific notification, failure counted
                 continue; // Skip to the next user if block fails
               }
 
               log.info("progctrl", `Successfully blocked user: ${username} (ID: ${authorId})`);
               blockedCount++;
-              notificationHandler.notify(`Başarıyla engellendi: ${username}`);
+              // No specific notification, success counted
 
 
               // Step C: Unmute the user
               log.info("progctrl", `Unmuting user: ${username} (ID: ${authorId})...`);
-              notificationHandler.notify(`Sessizden çıkarılıyor: ${username}`);
               const unmuteResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, authorId, false, false, true);
 
               // Check if early stop was triggered during the retry
@@ -482,11 +473,11 @@ class ProgramController
               if (unmuteResult.resultType !== enums.ResultType.SUCCESS) {
                 log.err("progctrl", `Failed to unmute user: ${username} (ID: ${authorId})`);
                 failedCount++; // Count as failed if unmute fails, even if block succeeded
-                notificationHandler.notify(`Sessizden çıkarılamadı: ${username}`);
+                // No specific notification, failure counted
               } else {
                 log.info("progctrl", `Successfully unmuted user: ${username} (ID: ${authorId})`);
                 unmutedCount++;
-                notificationHandler.notify(`Başarıyla sessizden çıkarıldı: ${username}`);
+                // Success counted, notifyOngoing will reflect this in the next iteration
                 successfullyProcessedUsernames.push(username); // Add to list for storage update
               }
 
@@ -526,21 +517,27 @@ class ProgramController
           await storageHandler.removeMutedUsers(successfullyProcessedUsernames);
       }
 
-      // Final status update
-      const finalMessage = `Sessize alınan kullanıcıları engelleme tamamlandı. Başarıyla engellenip sessizden çıkarılan: ${unmutedCount}, Başarısız: ${failedCount}, Toplam işlenen: ${processedCount}`;
-      log.info("progctrl", finalMessage);
-      // Use notify for final completion status
-      notificationHandler.notify(finalMessage);
+      // Final status update using finishSuccess or finishErrorEarlyStop
+      const totalProcessed = processedCount; // Total users processed in the loop
+      if (this.earlyStop) {
+          log.info("progctrl", `Blocking muted users stopped early. Successfully processed: ${unmutedCount}, Failed: ${failedCount}, Total Processed: ${totalProcessed}`);
+          notificationHandler.finishErrorEarlyStop(enums.BanSource.BLOCK_MUTED_USERS, enums.BanMode.BAN, unmutedCount, totalProcessed, totalUsersFound); // Use BAN mode for the block action
+      } else {
+          const finalMessage = `Sessize alınan kullanıcıları engelleme tamamlandı. Başarıyla engellenip sessizden çıkarılan: ${unmutedCount}, Başarısız: ${failedCount}, Toplam işlenen: ${totalProcessed}`;
+          log.info("progctrl", finalMessage);
+          notificationHandler.finishSuccess(enums.BanSource.BLOCK_MUTED_USERS, enums.BanMode.BAN, unmutedCount, totalProcessed, totalUsersFound); // Use BAN mode for the block action
+      }
 
 
     } catch (error) {
       log.err("progctrl", `An unexpected error occurred during blocking muted users: ${error}`, error);
-      // Use notify for error status
+      // Use notify for general error status before finally block
       notificationHandler.notify(`Sessize alınan kullanıcıları engelleme sırasında beklenmedik bir hata oluştu: ${error.message || "Bilinmeyen hata"}. İşlenen: ${processedCount} kullanıcı.`);
+      // Consider adding a finishError call here if appropriate, depending on desired final state display
     } finally {
       log.info("progctrl", "blockMutedUsers function completed.");
-      this.earlyStop = false;
-      this._blockMutedUsersInProgress = false;
+      this.earlyStop = false; // Reset early stop flag in finally
+      this._blockMutedUsersInProgress = false; // Reset flag in finally
       // Refresh muted user count display after the operation
       notificationHandler.updateMutedUserCountDisplay();
       notificationHandler.updateBlockedUserCountDisplay(); // Also update blocked count
@@ -797,50 +794,63 @@ notificationHandler.notify(`${totalCount} adet başlıkları engellenen kullanı
           notificationHandler.notify(`Başlık engeli kaldırma erken durduruldu. İşlenen kullanıcı: ${i}/${usersWithBlockedTitles.length}.`);
           break;
         }
-
-        const user = usersWithBlockedTitles[i];
-        // Use sendMigrationMessage for progress updates
-        notificationHandler.sendMigrationMessage('progress', `Unblocking titles for user ${i + 1}/${usersWithBlockedTitles.length}: ${user.authorName}`, "", i + 1, usersWithBlockedTitles.length, null, null, null);
-
-        log.info("progctrl", `Unblocking titles for user: ${user.authorName} (ID: ${user.authorId})...`);
-
-        // Perform the unblocking action for titles associated with this user ID
-        // Note: The API unblocks *all* titles by this user if any were blocked via the relation-list endpoint.
-        const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, user.authorId, false, true, false);
-
-        // Check if early stop was triggered during the retry
-        if (unblockResult.earlyStop) {
-          log.info("progctrl", "Unblocking titles stopped early by user during action.");
-          break;
-        }
-
-        if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
-          log.err("progctrl", `Failed to unblock titles for user: ${user.authorName}`);
-          failedCount++;
-        } else {
-          log.info("progctrl", `Successfully unblocked titles for user: ${user.authorName}`);
-          unblockedCount++;
-        }
-
-        // Small delay between users
-        await utils.sleep(500); // Assuming a small delay is appropriate
-      }
  
-      const finalMessage = `Durum: Engellenen başlıkların engeli kaldırıldı. Başarıyla engeli kaldırılan kullanıcılar: ${unblockedCount}, Başarısız kullanıcılar: ${failedCount}, Toplam işlenen kullanıcı: ${usersWithBlockedTitles.length}`;
-      log.info("progctrl", finalMessage);
-      notificationHandler.notify(finalMessage);
+         const user = usersWithBlockedTitles[i];
+         const currentProgress = i + 1;
+         const totalUsers = usersWithBlockedTitles.length;
  
-    } catch (error) {
-      log.err("progctrl", `An error occurred during unblocking blocked titles: ${error}`, error);
-      notificationHandler.notify(`Engellenen başlıkların engeli kaldırılırken bir hata oluştu: ${error.message}`);
-    } finally {
-      log.info("progctrl", "migrateBlockedTitlesToUnblocked function completed.");
-      this.earlyStop = false;
-      this._blockTitlesInProgress = false; // Reset flag
-      // No specific display update needed for this operation currently
-    }
-  }
-
-}
-
-export const programController = new ProgramController();
+         // Use notifyOngoing for progress updates
+         notificationHandler.notifyOngoing(unblockedCount, currentProgress, totalUsers);
+ 
+         log.info("progctrl", `Unblocking titles for user: ${user.authorName} (ID: ${user.authorId})...`);
+ 
+         // Perform the unblocking action for titles associated with this user ID
+         // Note: The API unblocks *all* titles by this user if any were blocked via the relation-list endpoint.
+         const unblockResult = await this._performActionWithRetry(enums.BanMode.UNDOBAN, user.authorId, false, true, false);
+ 
+         // Check if early stop was triggered during the retry
+         if (unblockResult.earlyStop) {
+           log.info("progctrl", "Unblocking titles stopped early by user during action.");
+           break;
+         }
+ 
+         if (unblockResult.resultType !== enums.ResultType.SUCCESS) {
+           log.err("progctrl", `Failed to unblock titles for user: ${user.authorName}`);
+           failedCount++;
+         } else {
+           log.info("progctrl", `Successfully unblocked titles for user: ${user.authorName}`);
+           unblockedCount++;
+         }
+ 
+         // Small delay between users
+         await utils.sleep(500); // Assuming a small delay is appropriate
+       }
+  
+       // Final status update using finishSuccess or finishErrorEarlyStop
+       const totalProcessed = unblockedCount + failedCount;
+       if (this.earlyStop) {
+           log.info("progctrl", `Unblocking titles stopped early. Unblocked: ${unblockedCount}, Failed: ${failedCount}, Total Processed: ${totalProcessed}`);
+           notificationHandler.finishErrorEarlyStop(enums.BanSource.TITLE, enums.BanMode.UNDOBAN, unblockedCount, totalProcessed, usersWithBlockedTitles.length); // Use TITLE source and UNDOBAN mode
+       } else {
+           const finalMessage = `Durum: Engellenen başlıkların engeli kaldırıldı. Başarıyla engeli kaldırılan kullanıcılar: ${unblockedCount}, Başarısız kullanıcılar: ${failedCount}, Toplam işlenen kullanıcı: ${totalProcessed}`;
+           log.info("progctrl", finalMessage);
+           notificationHandler.finishSuccess(enums.BanSource.TITLE, enums.BanMode.UNDOBAN, unblockedCount, totalProcessed, usersWithBlockedTitles.length); // Use TITLE source and UNDOBAN mode
+       }
+  
+     } catch (error) {
+       log.err("progctrl", `An error occurred during unblocking blocked titles: ${error}`, error);
+       // Use notify for general error status before finally block
+       notificationHandler.notify(`Engellenen başlıkların engeli kaldırılırken bir hata oluştu: ${error.message}`);
+       // Consider adding a finishError call here if appropriate, depending on desired final state display
+     } finally {
+       log.info("progctrl", "migrateBlockedTitlesToUnblocked function completed.");
+       this.earlyStop = false; // Reset early stop flag in finally
+       this._blockTitlesInProgress = false; // Reset flag in finally
+       // Refresh relevant counts if needed
+       // notificationHandler.updateBlockedTitleCountDisplay(); // Assuming a function like this exists or is needed
+     }
+   }
+ 
+ }
+ 
+ export const programController = new ProgramController();
