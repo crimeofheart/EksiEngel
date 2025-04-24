@@ -168,6 +168,11 @@ class NotificationHandler
     this.#sendMessage(enums.NotificationType.NOTIFY, statusText, "", [], null, 0, 0, 0, 0);
   }
 
+  // Public method to trigger updating user counts in the notification page
+  notifyUpdateCounts = () => {
+    this.#sendMessage(enums.NotificationType.UPDATE_COUNTS, "", "", [], null, 0, 0, 0, 0);
+  }
+
   // --- Migration Specific Notifications ---
   sendMigrationMessage = (migrationStatus, statusText, errorText, current, total, migrated, skipped, failed, simulatedBlockedCount) => {
     // Reusing existing fields where possible, adding migration-specific ones

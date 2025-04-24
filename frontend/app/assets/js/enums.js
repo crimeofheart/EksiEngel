@@ -59,6 +59,7 @@ export const NotificationType = {
   FINISH:                   "FINISH",
   NOTIFY:                   "NOTIFY",
   MIGRATION_UPDATE:         "MIGRATION_UPDATE",
+  UPDATE_COUNTS:            "UPDATE_COUNTS", // New action to trigger count updates
 };
 
 export const TimeSpecifier = {

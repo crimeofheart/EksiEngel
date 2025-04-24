@@ -335,8 +335,7 @@ class ProgramController
       this.earlyStop = false; // Reset early stop flag in finally
       this._migrationInProgress = false; // Reset migration flag in finally
       // Refresh relevant counts if needed
-      notificationHandler.updateMutedUserCountDisplay();
-      notificationHandler.updateBlockedUserCountDisplay();
+      notificationHandler.notifyUpdateCounts();
     }
   }
 
@@ -538,9 +537,8 @@ class ProgramController
       log.info("progctrl", "blockMutedUsers function completed.");
       this.earlyStop = false; // Reset early stop flag in finally
       this._blockMutedUsersInProgress = false; // Reset flag in finally
-      // Refresh muted user count display after the operation
-      notificationHandler.updateMutedUserCountDisplay();
-      notificationHandler.updateBlockedUserCountDisplay(); // Also update blocked count
+      // Refresh muted and blocked user count display after the operation
+      notificationHandler.notifyUpdateCounts();
     }
   }
 

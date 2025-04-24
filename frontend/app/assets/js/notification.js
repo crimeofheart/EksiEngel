@@ -351,6 +351,15 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     return true; // Keep the message channel open for the async response
   }
 
+  // Handle message to update user counts
+  if (message && message.action === enums.NotificationType.UPDATE_COUNTS) {
+    console.log("Received message to update user counts.");
+    loadMutedUserCount();
+    loadBlockedUserCount();
+    sendResponse({ status: "ok" });
+    return true;
+  }
+
   // Handle updateMutedListProgress messages (This seems specific to a different process, keeping for now)
   if (message && message.action === "updateMutedListProgress") {
     console.log(`Updating muted list progress: Page ${message.currentPage}, Total ${message.currentCount}`);
@@ -545,17 +554,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
           // Display the main cooldown message, including the link
           statusTextDiv.innerHTML = notification.statusText; // This contains the main text + link
         }
+
         if (remainingTimeDiv) {
           // Update the dedicated timer display
           remainingTimeDiv.innerHTML = `Kalan süre: ${notification.remainingTimeInSec} saniye`;
           remainingTimeDiv.style.display = "inline"; // Make sure it's visible
         }
       }
-      // Hide progress bar during cooldown
-      if (progressBar) progressBar.style.width = "0%";
-      if (progressBarText) progressBarText.innerHTML = "";
-      if (progressText) progressText.innerHTML = "";
-
     } else {
       // --- Handle Non-Cooldown Statuses ---
 
