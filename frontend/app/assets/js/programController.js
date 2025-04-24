@@ -187,7 +187,7 @@ class ProgramController
       // Fetch all blocked users
       log.info("progctrl", "Fetching all blocked users...");
       // Send status update: Fetching users
-      notificationHandler.notify("Engellenen kullanıcılar alınıyor...");
+      notificationHandler.notify("Engellenen kullanıcılar getiriliyor...");
       const scrapeResult = await scrapingHandler.scrapeAllBlockedUsers();
 
       if (!scrapeResult.success) {
@@ -199,7 +199,7 @@ class ProgramController
           message: `Failed to fetch blocked users: ${scrapeResult.error}`
         });
         this._migrationInProgress = false;
-        notificationHandler.notify(`Engellenen kullanıcılar alınamadı: ${scrapeResult.error}`);
+        notificationHandler.notify(`Engellenen kullanıcılar getirilemedi: ${scrapeResult.error}`);
         return;
       }
 
@@ -326,7 +326,7 @@ class ProgramController
       // The logic for usersToRemoveFromMuted and updating muted storage was incorrectly
       // copied from blockMutedUsers. Removing it here.
 
-      const finalMessage = `Migration completed. Successfully migrated: ${migratedCount}, Failed: ${failedCount}, Total processed: ${migratedCount + failedCount}`;
+      const finalMessage = `Taşıma tamamlandı. Başarıyla taşınan: ${migratedCount}, Başarısız: ${failedCount}, Toplam işlenen: ${migratedCount + failedCount}`;
       log.info("progctrl", finalMessage);
       // Use notify for final completion status
       notificationHandler.notify(finalMessage);
@@ -350,13 +350,13 @@ class ProgramController
 
     if (this._blockMutedUsersInProgress) {
       log.warn("progctrl", "Blocking muted users is already in progress.");
-      notificationHandler.notify("Blocking muted users is already in progress.");
+      notificationHandler.notify("Sessize alınmış kullanıcıları engelleme zaten devam ediyor.");
       return;
     }
 
     if (processQueue.isRunning) {
       log.warn("progctrl", "Cannot start blocking muted users while another operation is running.");
-      notificationHandler.notify("Cannot start blocking muted users while another operation is running.");
+      notificationHandler.notify("Başka bir işlem çalışırken sessize alınmış kullanıcıları engelleme başlatılamaz.");
       return;
     }
 
@@ -371,7 +371,7 @@ class ProgramController
     let totalUsersFound = 0; // Keep track of total users found across all pages
 
     try {
-      notificationHandler.notify("Sessize alınan kullanıcılar sayfa sayfa alınıyor ve işleniyor...");
+      notificationHandler.notify("Sessize alınan kullanıcılar sayfa sayfa getiriliyor ve işleniyor...");
 
       let isLastPage = false;
       let pageIndex = 0;
@@ -380,7 +380,7 @@ class ProgramController
       while (!isLastPage && !this.earlyStop) {
         pageIndex++;
         log.info("progctrl", `Fetching muted users page ${pageIndex}...`);
-        notificationHandler.notify(`Sessize alınan kullanıcılar alınıyor: Sayfa ${pageIndex}...`);
+        notificationHandler.notify(`Sessize alınan kullanıcılar getiriliyor: Sayfa ${pageIndex}...`);
 
         let partialListObj;
         try {
@@ -510,7 +510,7 @@ class ProgramController
           // A simpler approach is to just increment failedCount for the page itself or stop.
           // Let's just log the error and stop the process for now.
           failedCount++; // Count the page fetch/process as a failure
-          notificationHandler.notify(`Error processing page ${pageIndex}: ${pageError.message || "Unknown error"}. Stopping.`);
+          notificationHandler.notify(`Sayfa ${pageIndex} işlenirken hata: ${pageError.message || "Bilinmeyen hata"}. Durduruluyor.`);
           break; // Exit the while loop on page error
         }
 
@@ -553,13 +553,13 @@ class ProgramController
 
     if (this._blockTitlesInProgress) {
       log.warn("progctrl", "Blocking titles of blocked/muted users is already in progress.");
-      notificationHandler.notify("Blocking titles of blocked/muted users is already in progress.");
+      notificationHandler.notify("Engellenen/sessize alınan kullanıcıların başlıklarını engelleme işlemi zaten devam ediyor.");
       return;
     }
 
     if (processQueue.isRunning) {
       log.warn("progctrl", "Cannot start blocking titles while another operation is running.");
-      notificationHandler.notify("Cannot start blocking titles while another operation is running.");
+      notificationHandler.notify("Başka bir işlem çalışırken başlık engelleme başlatılamaz.");
       return;
     }
 
@@ -567,13 +567,13 @@ class ProgramController
     this.earlyStop = false;
 
     try {
-      notificationHandler.notify("Fetching blocked and muted user lists...");
+      notificationHandler.notify("Engellenen ve sessize alınan kullanıcı listeleri getiriliyor...");
 
       // Get blocked users (assuming scrapingHandler can fetch all blocked users)
       const blockedUsersResult = await scrapingHandler.scrapeAllBlockedUsers();
       if (!blockedUsersResult.success) {
           log.err("progctrl", `Failed to fetch blocked users: ${blockedUsersResult.error}`);
-          notificationHandler.notify(`Failed to fetch blocked users: ${blockedUsersResult.error}`);
+          notificationHandler.notify(`Engellenen kullanıcılar getirilemedi: ${blockedUsersResult.error}`);
           return; // Stop the process if fetching blocked users fails
       }
       const blockedUsers = blockedUsersResult.usernames.map(username => ({ authorName: username, authorId: null })); // Create objects with placeholder ID
@@ -608,12 +608,12 @@ class ProgramController
 
       if (usersToProcess.length === 0) {
         log.info("progctrl", "No blocked or muted users found to process titles for.");
-        notificationHandler.notify("No blocked or muted users found to process titles for.");
+        notificationHandler.notify("Başlıkları işlenecek engellenmiş veya sessize alınmış kullanıcı bulunamadı.");
         return;
       }
 
       log.info("progctrl", `Found ${usersToProcess.length} unique blocked/muted users to process titles for.`);
-      notificationHandler.notify(`Found ${usersToProcess.length} unique blocked/muted users. Starting title blocking process...`);
+      notificationHandler.notify(`${usersToProcess.length} benzersiz engellenmiş/sessize alınmış kullanıcı bulundu. Başlık engelleme işlemi başlatılıyor...`);
 
       let serverBlockedTitlesCount = 0; // Titles blocked via server API (for blocked users)
       let simulatedBlockedTitlesCount = 0; // Titles hidden client-side (for muted users)
@@ -628,7 +628,7 @@ class ProgramController
       for (let i = 0; i < usersToProcess.length; i++) {
         if (this.earlyStop) {
           log.info("progctrl", "Blocking titles stopped early by user.");
-          notificationHandler.notify(`Blocking titles stopped early. Processed ${i}/${usersToProcess.length} users.`);
+          notificationHandler.notify(`Başlık engelleme erken durduruldu. İşlenen kullanıcı: ${i}/${usersToProcess.length}.`);
           break;
         }
 
@@ -731,7 +731,7 @@ class ProgramController
     } catch (error) {
       log.err("progctrl", `An error occurred during blocking titles: ${error}`, error);
       // Use notify for error status, potentially including counts
-      notificationHandler.notify(`An error occurred during blocking titles: ${error.message}. Processed ${usersProcessedCount} users.`);
+      notificationHandler.notify(`Başlık engelleme sırasında bir hata oluştu: ${error.message}. İşlenen kullanıcı sayısı: ${usersProcessedCount}.`);
     } finally {
       log.info("progctrl", "blockTitlesOfBlockedMuted function completed.");
       this.earlyStop = false;
@@ -745,13 +745,13 @@ class ProgramController
 
     if (this._blockTitlesInProgress) { // Reusing this flag for simplicity, could create a new one if needed
       log.warn("progctrl", "Unblocking blocked titles is already in progress.");
-      notificationHandler.notify("Unblocking blocked titles is already in progress.");
+      notificationHandler.notify("Engellenen başlıkların engelini kaldırma işlemi zaten devam ediyor.");
       return;
     }
 
     if (processQueue.isRunning) {
       log.warn("progctrl", "Cannot start unblocking titles while another operation is running.");
-      notificationHandler.notify("Cannot start unblocking titles while another operation is running.");
+      notificationHandler.notify("Başka bir işlem çalışırken engellenen başlıkların engelini kaldırma başlatılamaz.");
       return;
     }
 
@@ -759,7 +759,7 @@ class ProgramController
     this.earlyStop = false;
 
     try {
-      notificationHandler.notify("Fetching list of users with blocked titles...");
+      notificationHandler.notify("Engellenen başlıkları olan kullanıcıların listesi getiriliyor...");
 
       const scrapeResult = await scrapingHandler.scrapeAllUsersWithBlockedTitles(
         (progress) => {
@@ -770,7 +770,7 @@ class ProgramController
 
       if (!scrapeResult.success) {
         log.err("progctrl", `Failed to fetch list of users with blocked titles: ${scrapeResult.error}`);
-        notificationHandler.notify(`Failed to fetch list of users with blocked titles: ${scrapeResult.error}`);
+        notificationHandler.notify(`Engellenen başlıkları olan kullanıcıların listesi getirilemedi: ${scrapeResult.error}`);
         return;
       }
 
@@ -779,12 +779,12 @@ class ProgramController
 
       if (usersWithBlockedTitles.length === 0) {
         log.info("progctrl", "No users with blocked titles found.");
-        notificationHandler.notify("No users with blocked titles found.");
+        notificationHandler.notify("Engellenen başlıkları olan kullanıcı bulunamadı.");
         return;
       }
+log.info("progctrl", `Successfully fetched list of ${totalCount} users with blocked titles. Starting unblocking process...`);
+notificationHandler.notify(`${totalCount} adet engellenen başlığı olan kullanıcı bulundu. Engel kaldırma işlemi başlatılıyor...`);
 
-      log.info("progctrl", `Successfully fetched list of ${totalCount} users with blocked titles. Starting unblocking process...`);
-      notificationHandler.notify(`Found ${totalCount} users with blocked titles. Starting unblocking process...`);
 
 
       let unblockedCount = 0;
@@ -794,7 +794,7 @@ class ProgramController
       for (let i = 0; i < usersWithBlockedTitles.length; i++) {
         if (this.earlyStop) {
           log.info("progctrl", "Unblocking titles stopped early by user.");
-          notificationHandler.notify(`Unblocking titles stopped early. Processed ${i}/${usersWithBlockedTitles.length} users.`);
+          notificationHandler.notify(`Başlık engeli kaldırma erken durduruldu. İşlenen kullanıcı: ${i}/${usersWithBlockedTitles.length}.`);
           break;
         }
 
@@ -825,14 +825,14 @@ class ProgramController
         // Small delay between users
         await utils.sleep(500); // Assuming a small delay is appropriate
       }
-
-      const finalMessage = `Unblocking blocked titles completed. Successfully unblocked users: ${unblockedCount}, Failed users: ${failedCount}, Total users processed: ${usersWithBlockedTitles.length}`;
+ 
+      const finalMessage = `Durum: Engellenen başlıkların engeli kaldırıldı. Başarıyla engeli kaldırılan kullanıcılar: ${unblockedCount}, Başarısız kullanıcılar: ${failedCount}, Toplam işlenen kullanıcı: ${usersWithBlockedTitles.length}`;
       log.info("progctrl", finalMessage);
       notificationHandler.notify(finalMessage);
-
+ 
     } catch (error) {
       log.err("progctrl", `An error occurred during unblocking blocked titles: ${error}`, error);
-      notificationHandler.notify(`An error occurred during unblocking blocked titles: ${error.message}`);
+      notificationHandler.notify(`Engellenen başlıkların engeli kaldırılırken bir hata oluştu: ${error.message}`);
     } finally {
       log.info("progctrl", "migrateBlockedTitlesToUnblocked function completed.");
       this.earlyStop = false;
