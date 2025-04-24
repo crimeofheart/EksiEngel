@@ -557,7 +557,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
         if (remainingTimeDiv) {
           // Update the dedicated timer display
-          remainingTimeDiv.innerHTML = `Kalan süre: ${notification.remainingTimeInSec} saniye`;
+          remainingTimeDiv.innerHTML = `${notification.remainingTimeInSec} saniye`;
           remainingTimeDiv.style.display = "inline"; // Make sure it's visible
         }
       }
